@@ -83,14 +83,22 @@ Z řádku se extrahuje:
 
 1. **Kód předmětu a číslo skupiny** (například `MP509Zk/01`).
 2. **Rozsah dat semestru** (informativní, viz kontrola semestru).
-3. **Parita a den**: přítomnost "každé liché <den>" nebo "každé sudé <den>" značí
-   čtrnáctidenní skupinu dané parity. Jinak jde o týdenní skupinu a den je určen
+3. **Parita a den**: přítomnost tvaru "každé liché/sudé <den>" značí čtrnáctidenní
+   skupinu dané parity. [POŽADAVEK, ověřeno na datech] Tvar se skloňuje podle rodu
+   dne, parser musí rozpoznat všech pět variant: "každé liché/sudé pondělí",
+   "každé liché/sudé úterý", "každou lichou/sudou středu", "každý lichý/sudý
+   čtvrtek", "každý lichý/sudý pátek". Jinak jde o týdenní skupinu a den je určen
    zkratkou (Po, Út, St, Čt, Pá).
 4. **Čas od a do** ve tvaru HH:MM–HH:MM.
 5. **Místnost**: text v odkazu s třídou `okno` (`<A class="okno">`).
 6. **Vyučující**: text v kurzívě (`<I>`) za čárkou. Toto je vyučující rozhodný pro
    preference, tedy vyučující uvedený u konkrétní skupiny, nikoli v obecném výčtu
    garantů předmětu.
+
+[POŽADAVEK, ověřeno na datech] Vyučující nemusí být u skupiny uveden vůbec (řádek
+skončí místností bez části ", <I>...</I>"). Parser to nemá řešit jako chybu. Skupina
+bez vyučujícího se preferencí z 6.1 nedotkne (ani kladně, ani záporně) — správnost
+a úplnost katalogových dat je odpovědnost uživatele.
 
 ### 3.3 Kontrola semestru
 
@@ -113,6 +121,11 @@ upozorní.
 odečíst z pole "Vyučovací jazyk" (hodnoty jako "Čeština", "Angličtina"). Parsing se
 neopírá o jazyk volného textu, jen o české strukturní popisky.
 
+[POŽADAVEK, ověřeno na datech] Pole "Vyučovací jazyk" je v HTML přítomné jen tehdy,
+když výuka není v češtině; u českých předmětů pole v katalogu chybí úplně. Chybějící
+pole se interpretuje jako čeština. Jazyk je informativní údaj — jeho případné chybné
+určení nesmí nikdy zabránit sestavení rozvrhu.
+
 ### 3.5 Ignorované jevy
 
 [POŽADAVEK] Aplikace ignoruje kapacitu a stav zápisu skupin. Je to odpovědnost
@@ -120,6 +133,13 @@ uživatele.
 
 [POŽADAVEK] Předmět bez vypsaného rozvrhu aplikace neřeší zvláštní hláškou. Nemá
 u něj co umístit, výběr takového předmětu je na uživateli.
+
+[POŽADAVEK, ověřeno na datech] Jednotlivá seminární skupina bez vypsaného rozvrhu
+(v HTML text "Rozvrh nebyl do ISu vložen.", bez dne, času i místnosti) se při
+parsování zahodí a do datového modelu se vůbec nezařadí. Jde typicky o poslední
+skupiny v seznamu, vyhrazené pro studenty s ISP. Počet skutečných skupin předmětu
+pro účely varianty A (5.1, bezalternativní jediná skupina) se počítá až po tomto
+odfiltrování.
 
 ---
 
