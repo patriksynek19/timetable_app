@@ -3,8 +3,8 @@
  *
  * Řešič je přímý backtracking (CLAUDE.md 12): předměty seřazené od nejmenšího
  * počtu skupin, průběžné ořezávání podle kolizí a limitu dnů. Vrací přípustné
- * rozvrhy do zadaného stropu počtu řešení; výběr a bodování variant je věcí
- * milníku 3 (sekce 6 a 8.1).
+ * rozvrhy do zadaného stropu počtu řešení; bodované hledání nejlepších variant
+ * staví na stejných doménách v js/variants.js.
  */
 
 /**
@@ -49,34 +49,24 @@ export function countDays(groups, parityKey, exemptCourseCodes = new Set()) {
 }
 
 /**
- * Hlavní vstup řešiče.
+ * Společná příprava domén pro solve i findVariants (js/variants.js):
+ * deduplikace předmětů, ukotvení, varianta A a blokované časy.
  *
- * courses: pole předmětů z parseru (js/parser.js).
- * settings: {
- *   blockedTimes:       [{ day, startMin, endMin, parity? }],
- *   dayLimit:           číslo N, nebo null = bez limitu (CLAUDE.md 5 bod 4),
- *   dayLimitExceptions: [kódy předmětů s ruční výjimkou] (5.2),
- *   anchoredGroups:     { kódPředmětu: idSkupiny } ruční ukotvení (5 bod 5),
- * }
- * options: { maxSolutions } strop počtu vrácených řešení.
- *
- * Vrací { status: 'ok'|'infeasible'|'error', errors, warnings, schedules,
- * truncated }. Rozvrh je pole vybraných skupin, právě jedna na předmět.
+ * Vrací { errors, warnings, domains, exemptCodes, infeasible }, kde doména je
+ * { course, groups, anchored }.
  */
-export function solve(courses, settings = {}, options = {}) {
+export function prepareDomains(courses, settings = {}) {
   const {
     blockedTimes = [],
-    dayLimit = null,
     dayLimitExceptions = [],
     anchoredGroups = {},
   } = settings;
-  const maxSolutions = options.maxSolutions ?? 5000;
 
   const errors = [];
   const warnings = [];
   const exemptCodes = new Set(dayLimitExceptions);
 
-  // Sestavení domén: jen předměty, které mají co umístit (CLAUDE.md 3.5).
+  // Jen předměty, které mají co umístit (CLAUDE.md 3.5).
   const domains = [];
   const seenCodes = new Set();
   for (const course of courses) {
@@ -106,7 +96,7 @@ export function solve(courses, settings = {}, options = {}) {
     }
   }
   if (errors.length > 0) {
-    return { status: 'error', errors, warnings, schedules: [], truncated: false };
+    return { errors, warnings, domains: [], exemptCodes, infeasible: false };
   }
 
   // Blokované časy. Pevně daná skupina — varianta A (jediná skupina, 5.1) nebo
@@ -130,22 +120,73 @@ export function solve(courses, settings = {}, options = {}) {
     d.groups = d.groups.filter((g) => !conflictsWithBlocked(g, blockedTimes));
     if (d.groups.length === 0) {
       // Více skupin, všechny v blokovaných časech: řešení neexistuje (5.1, 5.4).
-      return { status: 'infeasible', errors, warnings, schedules: [], truncated: false };
+      return { errors, warnings, domains: [], exemptCodes, infeasible: true };
     }
   }
 
-  // Pořadí předmětů. Předměty s výjimkou z limitu dnů jdou první: jejich den
-  // může „uvolnit" den ostatním (5.2), takže dokud nejsou všechny umístěné,
-  // nelze na limit dnů bezpečně ořezávat. Uvnitř skupin řadíme podle velikosti
-  // domény, aby ukotvené a bezalternativní skupiny (varianta A) ořezaly co
-  // nejvíc.
-  domains.sort((a, b) => {
+  return { errors, warnings, domains, exemptCodes, infeasible: false };
+}
+
+/**
+ * Pořadí předmětů pro prohledávání. Předměty s výjimkou z limitu dnů jdou
+ * první: jejich den může „uvolnit" den ostatním (5.2), takže dokud nejsou
+ * všechny umístěné, nelze na limit dnů bezpečně ořezávat. Uvnitř skupin se
+ * řadí podle velikosti domény, aby ukotvené a bezalternativní skupiny
+ * (varianta A) ořezaly co nejvíc.
+ */
+export function orderDomains(domains, exemptCodes) {
+  const sorted = [...domains].sort((a, b) => {
     const ea = exemptCodes.has(a.course.code) ? 0 : 1;
     const eb = exemptCodes.has(b.course.code) ? 0 : 1;
     if (ea !== eb) return ea - eb;
     return a.groups.length - b.groups.length;
   });
-  const exemptCount = domains.filter((d) => exemptCodes.has(d.course.code)).length;
+  const exemptCount = sorted.filter((d) =>
+    exemptCodes.has(d.course.code)
+  ).length;
+  return { sorted, exemptCount };
+}
+
+/**
+ * Hlavní vstup řešiče.
+ *
+ * courses: pole předmětů z parseru (js/parser.js).
+ * settings: {
+ *   blockedTimes:       [{ day, startMin, endMin, parity? }],
+ *   dayLimit:           číslo N, nebo null = bez limitu (CLAUDE.md 5 bod 4),
+ *   dayLimitExceptions: [kódy předmětů s ruční výjimkou] (5.2),
+ *   anchoredGroups:     { kódPředmětu: idSkupiny } ruční ukotvení (5 bod 5),
+ * }
+ * options: { maxSolutions } strop počtu vrácených řešení.
+ *
+ * Vrací { status: 'ok'|'infeasible'|'error', errors, warnings, schedules,
+ * truncated }. Rozvrh je pole vybraných skupin, právě jedna na předmět.
+ */
+export function solve(courses, settings = {}, options = {}) {
+  const { dayLimit = null } = settings;
+  const maxSolutions = options.maxSolutions ?? 5000;
+
+  const prep = prepareDomains(courses, settings);
+  if (prep.errors.length > 0) {
+    return {
+      status: 'error',
+      errors: prep.errors,
+      warnings: prep.warnings,
+      schedules: [],
+      truncated: false,
+    };
+  }
+  if (prep.infeasible) {
+    return {
+      status: 'infeasible',
+      errors: [],
+      warnings: prep.warnings,
+      schedules: [],
+      truncated: false,
+    };
+  }
+  const { exemptCodes } = prep;
+  const { sorted: domains, exemptCount } = orderDomains(prep.domains, exemptCodes);
 
   const withinDayLimit = (chosen, candidate) => {
     if (dayLimit == null) return true;
@@ -192,8 +233,8 @@ export function solve(courses, settings = {}, options = {}) {
 
   return {
     status: schedules.length > 0 ? 'ok' : 'infeasible',
-    errors,
-    warnings,
+    errors: [],
+    warnings: prep.warnings,
     schedules,
     truncated,
   };

@@ -25,6 +25,7 @@ export function assertEqual(actual, expected, msg) {
 export function renderResults() {
   const lists = {
     SOLVER: document.getElementById('solver'),
+    SCORE: document.getElementById('score'),
     REAL: document.getElementById('real'),
   };
   const unitList = document.getElementById('unit');

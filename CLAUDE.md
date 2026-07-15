@@ -376,6 +376,10 @@ na ležato (landscape), jiná orientace je snesitelná.
 - Hranice "dlouhého dne" pro úlevu druhého okna (6.2).
 - Počet a skladba nabízených variant, pokud by 5 nevyhovovalo (8.1).
 
+[NÁVRH, domluveno] Postup ladění vah: vygeneruje se několik různých rozvrhů
+z reálných dat, zadavatel je komplexně ohodnotí (které jsou lepší a proč) a
+z tohoto hodnocení se zpětně odvodí úpravy vah. Provede se po dokončení UI.
+
 ---
 
 ## 12. Technická a publikační doporučení

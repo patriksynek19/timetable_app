@@ -5,6 +5,7 @@
 import { test, assert, assertEqual } from './harness.js';
 import { parseCourseHtml, DAYS } from '../js/parser.js';
 import { solve, groupsConflict, countDays } from '../js/solver.js';
+import { findVariants } from '../js/variants.js';
 
 const realList = document.getElementById('real');
 const courses = [];
@@ -113,6 +114,56 @@ if (courses.length > 0) {
       li.textContent = `solve s limitem ${dayLimit} dnů: ${r.status}` +
         (r.status === 'ok' ? ` (${r.schedules.length}${r.truncated ? '+' : ''} řešení)` : '');
       realList.appendChild(li);
+    }
+  });
+
+  test('REAL variants: findVariants vrací 5 platných variant seřazených podle skóre', () => {
+    const started = performance.now();
+    const r = findVariants(courses);
+    const elapsed = Math.round(performance.now() - started);
+    assertEqual(r.status, 'ok', 'status');
+    assertEqual(r.variants.length, 5, 'pět variant');
+    const single = courses.find((c) => c.singleGroup);
+    for (let i = 0; i < r.variants.length; i++) {
+      assertValid(r.variants[i].schedule);
+      assert(
+        r.variants[i].schedule.some((g) => g.id === single.groups[0].id),
+        'varianta A přítomna'
+      );
+      if (i > 0) {
+        assert(
+          r.variants[i - 1].score.total >= r.variants[i].score.total,
+          'seřazeno sestupně'
+        );
+      }
+    }
+    const v0 = r.variants[0];
+    const li = document.createElement('li');
+    li.textContent =
+      `findVariants: ${elapsed} ms, ${r.nodesExplored} uzlů` +
+      `${r.truncated ? ' (oříznuto pojistkou)' : ''}; nejlepší varianta: ` +
+      `skóre ${v0.score.total}, dny ${v0.score.details.daysOdd}+${v0.score.details.daysEven}, ` +
+      `okna ${v0.score.details.windows}, nejdelší řada ${v0.score.details.longestRun}, ` +
+      `štítky [${v0.tags.join(', ')}]`;
+    realList.appendChild(li);
+  });
+
+  test('REAL variants: nechtěný vyučující se v nejlepší variantě nevyskytne', () => {
+    // MP509Zk vede Z. Králíčková a M. Kornel; nechtěná Králíčková
+    // má alternativu, takže nejlepší varianta ji obsahovat nesmí (6.1).
+    const prefs = { teachers: { MP509Zk: { unwanted: ['Z. Králíčková'] } } };
+    const r = findVariants(courses, {}, prefs);
+    assertEqual(r.status, 'ok', 'status');
+    const g = r.variants[0].schedule.find((x) => x.courseCode === 'MP509Zk');
+    assert(g, 'MP509Zk je v rozvrhu');
+    assert(g.teacher !== 'Z. Králíčková', `vybrán ${g.teacher}`);
+  });
+
+  test('REAL variants: limit dnů 2 dá platné varianty', () => {
+    const r = findVariants(courses, { dayLimit: 2 });
+    assertEqual(r.status, 'ok', 'status');
+    for (const v of r.variants) {
+      assertValid(v.schedule, { dayLimit: 2 });
     }
   });
 }
