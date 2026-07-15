@@ -176,7 +176,12 @@ Rozvrh, který poruší kterékoli tvrdé omezení, je neplatný.
    limitu N rovno 2).
 
 5. [POŽADAVEK] **Ukotvené skupiny.** Skupina ručně ukotvená uživatelem (sekce 7) je
-   ve výsledku pevně a nemění se.
+   ve výsledku pevně a nemění se; aplikace dopočítá zbytek rozvrhu okolo ní.
+   [POŽADAVEK] Padne-li ukotvená skupina do blokovaného času, ukotvení blokaci
+   přebije a aplikace na to upozorní — stejně jako u varianty A (5.1), protože ruční
+   ukotvení je silnější projev vůle uživatele než blokace. Limit počtu dnů (bod 4)
+   tím ukotvení nepřebíjí: pokud ukotvená skupina tlačí rozvrh přes limit dnů, jde
+   o případ výjimky z limitu (5.2), o které rozhoduje výhradně uživatel.
 
 ### 5.1 Předmět s jediným seminářem (varianta A)
 
@@ -193,6 +198,11 @@ povinnostmi, spadá pod "řešení neexistuje", nikoli pod variantu A.
 [POŽADAVEK] Uživatel může u konkrétního předmětu ručně udělit výjimku z limitu dnů.
 O výjimce rozhoduje výhradně uživatel, aplikace ji neuděluje automaticky (ani u
 předmětů s jediným seminářem).
+
+[NÁVRH, budoucí rozšíření] Když pevně daná skupina (ukotvená nebo jediná) tlačí
+rozvrh přes limit dnů, takže by rozvrh jinak nešel sestavit nebo by výrazně ztrácel
+na skóre, aplikace může uživateli nabídnout hlášku, zda pro daný předmět výjimku
+z limitu neudělit. Rozhodnutí zůstává na uživateli.
 
 ### 5.3 Jiná fakulta
 
