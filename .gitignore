@@ -1,0 +1,9 @@
+# Stažené stránky katalogu IS MU (osobní data, viz CLAUDE.md sekce 12)
+*Informace o předmětu*.html
+
+# OS
+.DS_Store
+
+# Editory
+.vscode/
+.idea/
