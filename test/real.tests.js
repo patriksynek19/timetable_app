@@ -1,6 +1,10 @@
 /**
  * Integrační testy nad reálnými uloženými stránkami v kořeni projektu.
  * Soubory jsou jen lokální (mimo repozitář); bez nich se sekce přeskočí.
+ *
+ * Seznam souborů čte z gitignorovaného test/local-samples.json — vygeneruje se:
+ *   python3 -c "import json,glob; json.dump([f for f in sorted(glob.glob('*.html'))
+ *     if f != 'index.html'], open('test/local-samples.json','w'), ensure_ascii=False)"
  */
 import { test, assert, assertEqual } from './harness.js';
 import { parseCourseHtml, DAYS } from '../js/parser.js';
@@ -11,21 +15,22 @@ const realList = document.getElementById('real');
 const courses = [];
 
 try {
-  const listing = await (await fetch('/')).text();
-  const doc = new DOMParser().parseFromString(listing, 'text/html');
-  const files = [...doc.querySelectorAll('a')]
-    .map((a) => a.getAttribute('href'))
-    .filter((h) => h && h.endsWith('.html') && !h.includes('test'));
+  let files = [];
+  try {
+    const resp = await fetch('./local-samples.json');
+    if (resp.ok) files = await resp.json();
+  } catch {
+    files = [];
+  }
 
   if (files.length === 0) {
     realList.innerHTML =
-      '<li class="warn">Žádné reálné soubory nenalezeny (v pořádku např. na CI).</li>';
+      '<li class="warn">Žádné reálné soubory nenalezeny — chybí test/local-samples.json (v pořádku např. na CI).</li>';
   }
 
-  for (const href of files) {
-    const html = await (await fetch('/' + href)).text();
+  for (const label of files) {
+    const html = await (await fetch('/' + encodeURIComponent(label))).text();
     const r = parseCourseHtml(html);
-    const label = decodeURIComponent(href);
     test(`REAL ${label}: parsování ok`, () => {
       assertEqual(r.errors, [], 'errors');
       assert(r.ok && r.course, 'ok');

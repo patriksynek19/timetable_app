@@ -112,6 +112,13 @@ Období je ve tvaru `podzim<rok>` nebo `jaro<rok>`.
 [POŽADAVEK] Pokud uživatel nahraje stránku ze staršího období, aplikace zobrazí
 chybovou hlášku a předmět nezpracuje jako platný vstup.
 
+[POŽADAVEK, rozhodnuto] Nadcházející semestr se odhadne z dnešního data, přičemž
+únor se počítá ještě k jarnímu semestru a září ještě k podzimnímu (rozvrhy
+nadcházejícího semestru se mohou měnit na poslední chvíli): březen az září →
+podzim téhož roku, říjen az prosinec → jaro následujícího roku, leden a únor →
+jaro téhož roku. Stránka staršího období než odhad je chyba; stránka novějšího
+období se přijme s upozorněním (skládání rozvrhu dopředu je legitimní).
+
 [NÁVRH] Pokud se nahrané předměty navzájem liší obdobím, aplikace na neshodu
 upozorní.
 

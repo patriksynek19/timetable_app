@@ -1,6 +1,11 @@
 /** Jednotkové testy parseru na anonymizovaných vzorcích. */
 import { test, assert, assertEqual } from './harness.js';
-import { parseCourseHtml, parsePeriod, periodOrdinal } from '../js/parser.js';
+import {
+  parseCourseHtml,
+  parsePeriod,
+  periodOrdinal,
+  expectedPeriod,
+} from '../js/parser.js';
 
 const csHtml = await (await fetch('./fixtures/fixture-cs.html')).text();
 const enHtml = await (await fetch('./fixtures/fixture-en.html')).text();
@@ -91,6 +96,34 @@ test('Stránka bez nadpisu skupin => hasSeminars false', () => {
   assert(r.ok, 'ok');
   assertEqual(r.course.hasSeminars, false, 'hasSeminars');
   assertEqual(r.course.groups, [], 'groups');
+});
+test('CS: přednášky z pole Rozvrh — pravidelná i nepravidelná (s datem)', () => {
+  assertEqual(cs.course.lectures.length, 2, 'dvě položky');
+  const [regular, dated] = cs.course.lectures;
+  assertEqual(
+    [regular.day, regular.parity, regular.start, regular.end, regular.dated],
+    ['Po', 'weekly', '8:00', '9:40', false],
+    'pravidelná přednáška Po'
+  );
+  assertEqual(
+    [dated.day, dated.parity, dated.start, dated.end, dated.dated],
+    ['St', 'weekly', '16:00', '17:40', true],
+    'nepravidelná přednáška St s datem'
+  );
+  assertEqual(cs.course.hasIrregularLectures, true, 'příznak nepravidelnosti');
+});
+test('EN: bez pole Rozvrh => žádné přednášky', () => {
+  assertEqual(en.course.lectures, [], 'prázdné');
+  assertEqual(en.course.hasIrregularLectures, false, 'bez příznaku');
+});
+test('Odhad nadcházejícího semestru z data (3.3): hranice únor a září', () => {
+  const p = (y, monthIndex) => expectedPeriod(new Date(y, monthIndex, 15)).raw;
+  assertEqual(p(2026, 6), 'podzim2026', 'červenec');
+  assertEqual(p(2026, 2), 'podzim2026', 'březen');
+  assertEqual(p(2026, 8), 'podzim2026', 'září ještě podzim');
+  assertEqual(p(2026, 1), 'jaro2026', 'únor ještě jaro');
+  assertEqual(p(2026, 9), 'jaro2027', 'říjen');
+  assertEqual(p(2027, 0), 'jaro2027', 'leden');
 });
 test('Pořadí období: jaro2026 < podzim2026 < jaro2027', () => {
   const j26 = periodOrdinal(parsePeriod('jaro2026'));

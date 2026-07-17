@@ -114,6 +114,14 @@ test('SCORE: nechtěný vyučující = velká ztráta, chtěný = bonus, bez vyu
   assertEqual(noTeacher.breakdown.teachers, 0, 'bez vyučujícího se nedotkne');
 });
 
+test('SCORE: skupina s více vyučujícími — preference se trefí na kterékoli jméno', () => {
+  const g = blockGroup('A', '01', 'Po', 'weekly', 1, 'T. První, D. Druhý');
+  const wanted = scoreSchedule([g], { teachers: { A: { wanted: ['D. Druhý'] } } });
+  const unwanted = scoreSchedule([g], { teachers: { A: { unwanted: ['T. První'] } } });
+  assertEqual(wanted.breakdown.teachers, DEFAULT_PARAMS.wantedTeacherBonus, 'bonus');
+  assertEqual(unwanted.breakdown.teachers, DEFAULT_PARAMS.unwantedTeacherPenalty, 'postih');
+});
+
 // ---------- findVariants (8.1) ----------
 test('SCORE: findVariants preferuje chtěného a vyhne se nechtěnému vyučujícímu', () => {
   const courses = [

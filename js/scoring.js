@@ -107,11 +107,13 @@ export function groupAdditiveScore(group, prefs = {}, params = DEFAULT_PARAMS) {
   let teacher = 0;
   const tp = prefs.teachers?.[group.courseCode];
   if (group.teacher && tp) {
-    const t = normName(group.teacher);
-    if (tp.unwanted?.some((x) => normName(x) === t)) {
+    // Skupina může mít víc vyučujících najednou ("T. Kyselovská, D. Zafirelis");
+    // preference platí, když se trefí kterékoli jméno.
+    const names = group.teacher.split(',').map(normName);
+    if (tp.unwanted?.some((x) => names.includes(normName(x)))) {
       teacher += params.unwantedTeacherPenalty;
     }
-    if (tp.wanted?.some((x) => normName(x) === t)) {
+    if (tp.wanted?.some((x) => names.includes(normName(x)))) {
       teacher += params.wantedTeacherBonus;
     }
   }

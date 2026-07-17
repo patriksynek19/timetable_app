@@ -51,6 +51,21 @@ export function periodOrdinal(period) {
   return period.year * 2 + (period.term === 'podzim' ? 1 : 0);
 }
 
+/**
+ * Odhad nadcházejícího semestru z data (CLAUDE.md 3.3, rozhodnuto):
+ * únor patří ještě jaru a září ještě podzimu, protože rozvrhy nadcházejícího
+ * semestru se mohou měnit na poslední chvíli.
+ */
+export function expectedPeriod(date = new Date()) {
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  if (m >= 3 && m <= 9) {
+    return { raw: `podzim${y}`, term: 'podzim', year: y };
+  }
+  const year = m >= 10 ? y + 1 : y;
+  return { raw: `jaro${year}`, term: 'jaro', year };
+}
+
 function toMinutes(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
@@ -129,6 +144,83 @@ function parseGroupLine(line, warnings) {
       teacher: teacherMatch ? teacherMatch[1].trim() : null,
     },
   };
+}
+
+/**
+ * Rozvrh přednášek z pole "Rozvrh" (pro volitelné vyhrazení časů přednášek,
+ * CLAUDE.md sekce 7). Blok začíná <DT><B>Rozvrh</B></DT> a končí nadpisem
+ * seminárních skupin nebo dalším polem katalogu.
+ *
+ * Položky mají tvar: parita+čas ("každé sudé pondělí 8:00–9:40"), den+datum+čas
+ * ("St 25. 11. 16:00–17:40", nepravidelná přednáška), den+čas ("Út 8:00–9:40",
+ * pravidelná týdenní) nebo samotný čas (pokračování předchozího dne). Rozsah
+ * semestru ("Po 21. 9. až Pá 18. 12.") se nechytne, protože za datem nemá čas.
+ */
+const LECTURE_DT_RE = /<DT><B>Rozvrh<\/B><\/DT>/i;
+const LECTURE_TOKEN_RE = new RegExp(
+  `(?<par>${[...PARITY_FORMS.keys()].join('|')})\\s+(?<ps>\\d{1,2}:\\d{2})[–-](?<pe>\\d{1,2}:\\d{2})` +
+    '|(?<dday>Po|Út|St|Čt|Pá)\\s+(?<ddate>\\d{1,2}\\.\\s?\\d{1,2}\\.)\\s+(?<ds>\\d{1,2}:\\d{2})[–-](?<de>\\d{1,2}:\\d{2})' +
+    '|(?<wday>Po|Út|St|Čt|Pá)\\s+(?<ws>\\d{1,2}:\\d{2})[–-](?<we>\\d{1,2}:\\d{2})' +
+    '|(?<bs>\\d{1,2}:\\d{2})[–-](?<be>\\d{1,2}:\\d{2})',
+  'g'
+);
+
+function extractLectures(html) {
+  const dtMatch = LECTURE_DT_RE.exec(html);
+  if (!dtMatch) return [];
+  const start = dtMatch.index + dtMatch[0].length;
+  const ends = [html.indexOf(HEADING, start), html.indexOf('<DT>', start)]
+    .filter((i) => i !== -1);
+  const end = ends.length > 0 ? Math.min(...ends) : html.length;
+  const text = html.slice(start, end).replace(/<[^>]*>/g, ' ');
+
+  const byKey = new Map();
+  let lastDay = null;
+  let lastParity = 'weekly';
+  let lastDated = false;
+  for (const m of text.matchAll(LECTURE_TOKEN_RE)) {
+    const g = m.groups;
+    let day;
+    let parity;
+    let dated;
+    let startText;
+    let endText;
+    if (g.par) {
+      ({ parity, day } = PARITY_FORMS.get(g.par));
+      dated = false;
+      [startText, endText] = [g.ps, g.pe];
+    } else if (g.dday) {
+      [day, parity, dated] = [g.dday, 'weekly', true];
+      [startText, endText] = [g.ds, g.de];
+    } else if (g.wday) {
+      [day, parity, dated] = [g.wday, 'weekly', false];
+      [startText, endText] = [g.ws, g.we];
+    } else if (lastDay) {
+      [day, parity, dated] = [lastDay, lastParity, lastDated];
+      [startText, endText] = [g.bs, g.be];
+    } else {
+      continue; // osamocený čas bez dne nejde zablokovat
+    }
+    lastDay = day;
+    lastParity = parity;
+    lastDated = dated;
+    const key = `${day}|${parity}|${startText}|${endText}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.dated = existing.dated || dated;
+    } else {
+      byKey.set(key, {
+        day,
+        parity,
+        start: startText,
+        end: endText,
+        startMin: toMinutes(startText),
+        endMin: toMinutes(endText),
+        dated,
+      });
+    }
+  }
+  return [...byKey.values()];
 }
 
 /**
@@ -218,6 +310,7 @@ export function parseCourseHtml(html) {
     html,
     warnings
   );
+  const lectures = extractLectures(html);
 
   return {
     ok: true,
@@ -233,6 +326,8 @@ export function parseCourseHtml(html) {
       groups,
       unscheduledIds,
       singleGroup: groups.length === 1,
+      lectures,
+      hasIrregularLectures: lectures.some((l) => l.dated),
     },
   };
 }
