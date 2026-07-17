@@ -167,3 +167,65 @@ button.primary:hover { filter: brightness(1.1); }
 .variant ul { margin: 0.5rem 0 0; padding-left: 1.25rem; font-size: 0.92rem; }
 .variant li { margin: 0.15rem 0; }
 .variant .parity-note { color: var(--muted); }
+
+/* Mřížka rozvrhu (8.2) */
+.grid-wrap { overflow-x: auto; margin-top: 0.5rem; }
+.timetable {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 44rem;
+  font-size: 0.72rem;
+}
+.timetable th, .timetable td {
+  border: 1px solid var(--line);
+  padding: 0.2rem 0.3rem;
+  vertical-align: top;
+  text-align: left;
+}
+.timetable thead th {
+  background: var(--bg);
+  text-align: center;
+  font-size: 0.75rem;
+}
+.timetable th.day {
+  background: var(--bg);
+  font-size: 0.9rem;
+  text-align: center;
+  vertical-align: middle;
+  width: 2.2rem;
+}
+.timetable th.parity {
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 0.68rem;
+  width: 2.6rem;
+  vertical-align: middle;
+}
+.timetable td.empty { background: #fbfcfd; }
+.timetable tr.row-even td.empty { background: #f3f5f7; }
+.timetable td.cell { background: #ddf4ff33; }
+.timetable td.cell.weekly { background: #ddf4ff66; vertical-align: middle; }
+.timetable td.cell strong { display: block; white-space: nowrap; }
+.timetable .c-name {
+  color: var(--muted);
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timetable .c-detail { white-space: nowrap; }
+
+.variant-footer { margin-top: 0.5rem; }
+
+/* Export: tisk jediné vybrané varianty na ležato (8.4). Uložení do PDF
+   nabízí tiskový dialog prohlížeče. */
+@media print {
+  @page { size: A4 landscape; margin: 1cm; }
+  header p, footer, section:nth-of-type(1), section:nth-of-type(2),
+  .actions, #status, .msg, .variant-footer { display: none !important; }
+  body.has-print-target .variant:not(.print-target) { display: none; }
+  body { background: #fff; }
+  section, .variant { border: none; padding: 0; margin: 0; }
+  .grid-wrap { overflow: visible; }
+  .timetable { min-width: 0; }
+}

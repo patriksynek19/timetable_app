@@ -26,6 +26,7 @@ export function renderResults() {
   const lists = {
     SOLVER: document.getElementById('solver'),
     SCORE: document.getElementById('score'),
+    GRID: document.getElementById('grid'),
     REAL: document.getElementById('real'),
   };
   const unitList = document.getElementById('unit');

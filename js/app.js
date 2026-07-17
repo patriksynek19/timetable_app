@@ -7,6 +7,7 @@
 
 import { parseCourseHtml, periodOrdinal, expectedPeriod, DAYS } from './parser.js';
 import { findVariants } from './variants.js';
+import { buildVariantGrid } from './grid.js';
 
 const STORAGE_KEY = 'skladac-rozvrhu-v1';
 const BLOCKS = [0, 1, 2, 3, 4, 5]; // 8:00 az 19:40
@@ -529,37 +530,45 @@ function renderResults(r, elapsed) {
       `${d.daysOdd}/${d.daysEven}, oken: ${d.windows}, nejdelší řada: ${d.longestRun}`;
     card.append(breakdown);
 
-    const list = document.createElement('ul');
-    const sorted = [...v.schedule].sort(
-      (a, x) =>
-        a.dayIndex - x.dayIndex ||
-        a.startMin - x.startMin ||
-        a.parity.localeCompare(x.parity)
-    );
-    for (const g of sorted) {
-      const li = document.createElement('li');
-      const course = state.courses.find((c) => c.code === g.courseCode);
-      const parity = PARITY_LABEL[g.parity];
-      li.append(`${g.day} ${g.start}–${g.end} `);
-      if (parity) {
-        const note = document.createElement('span');
-        note.className = 'parity-note';
-        note.textContent = `(${parity}) `;
-        li.append(note);
+    // Mřížka rozvrhu (8.2): dny svisle, každý den řádek lichého a sudého
+    // týdne, týdenní semináře spojené přes oba.
+    const courseNames = new Map(state.courses.map((c) => [c.code, c.name]));
+    const gridWrap = document.createElement('div');
+    gridWrap.className = 'grid-wrap';
+    gridWrap.append(buildVariantGrid(v.schedule, courseNames));
+    card.append(gridWrap);
+
+    const footer = document.createElement('div');
+    footer.className = 'variant-footer';
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'export';
+    exportBtn.textContent = 'Exportovat (PDF / tisk)';
+    // Export přes tiskový dialog prohlížeče: vytiskne se jen tato varianta,
+    // na ležato (viz @media print v css). "Uložit jako PDF" je volba dialogu.
+    exportBtn.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('.variant.print-target')) {
+        other.classList.remove('print-target');
       }
-      li.append(
-        `— ${g.id} ${course ? course.name : ''}` +
-          (g.room ? ` · uč. ${g.room}` : '') +
-          (g.teacher ? ` · ${g.teacher}` : '')
-      );
-      list.append(li);
-    }
-    card.append(list);
+      card.classList.add('print-target');
+      document.body.classList.add('has-print-target');
+      window.print();
+    });
+    footer.append(exportBtn);
+    card.append(footer);
     results.append(card);
   });
 }
 
 // ---------- start ----------
+
+// Po zavření tiskového dialogu se výběr varianty k tisku zruší, aby běžný
+// Cmd/Ctrl+P zase tiskl celou stránku.
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('has-print-target');
+  for (const v of document.querySelectorAll('.variant.print-target')) {
+    v.classList.remove('print-target');
+  }
+});
 
 el('expected-period').textContent = expected.raw;
 el('file-input').addEventListener('change', (e) => {
