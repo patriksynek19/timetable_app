@@ -49,6 +49,20 @@ export function countDays(groups, parityKey, exemptCourseCodes = new Set()) {
 }
 
 /**
+ * Limity dnů z nastavení. Výchozí je jeden společný limit (settings.dayLimit)
+ * platný zvlášť pro lichý i sudý týden (CLAUDE.md 5 bod 4); volitelně lze
+ * zadat odlišné limity přes settings.dayLimits = { odd, even }, kde null
+ * znamená bez limitu pro daný týden.
+ */
+export function dayLimitsOf(settings = {}) {
+  const { dayLimit = null, dayLimits = null } = settings;
+  if (dayLimits) {
+    return { odd: dayLimits.odd ?? null, even: dayLimits.even ?? null };
+  }
+  return { odd: dayLimit, even: dayLimit };
+}
+
+/**
  * Společná příprava domén pro solve i findVariants (js/variants.js):
  * deduplikace předmětů, ukotvení, varianta A a blokované časy.
  *
@@ -154,6 +168,8 @@ export function orderDomains(domains, exemptCodes) {
  * settings: {
  *   blockedTimes:       [{ day, startMin, endMin, parity? }],
  *   dayLimit:           číslo N, nebo null = bez limitu (CLAUDE.md 5 bod 4),
+ *   dayLimits:          volitelně { odd, even } — odlišné limity pro lichý
+ *                       a sudý týden, má přednost před dayLimit,
  *   dayLimitExceptions: [kódy předmětů s ruční výjimkou] (5.2),
  *   anchoredGroups:     { kódPředmětu: idSkupiny } ruční ukotvení (5 bod 5),
  * }
@@ -163,7 +179,8 @@ export function orderDomains(domains, exemptCodes) {
  * truncated }. Rozvrh je pole vybraných skupin, právě jedna na předmět.
  */
 export function solve(courses, settings = {}, options = {}) {
-  const { dayLimit = null } = settings;
+  const limits = dayLimitsOf(settings);
+  const hasLimit = limits.odd != null || limits.even != null;
   const maxSolutions = options.maxSolutions ?? 5000;
 
   const prep = prepareDomains(courses, settings);
@@ -189,9 +206,11 @@ export function solve(courses, settings = {}, options = {}) {
   const { sorted: domains, exemptCount } = orderDomains(prep.domains, exemptCodes);
 
   const withinDayLimit = (chosen, candidate) => {
-    if (dayLimit == null) return true;
+    if (!hasLimit) return true;
     for (const parityKey of ['odd', 'even']) {
-      if (countDays([...chosen, candidate], parityKey, exemptCodes) > dayLimit) {
+      const limit = limits[parityKey];
+      if (limit == null) continue;
+      if (countDays([...chosen, candidate], parityKey, exemptCodes) > limit) {
         return false;
       }
     }
@@ -210,9 +229,11 @@ export function solve(courses, settings = {}, options = {}) {
     if (i === domains.length) {
       // Ořez během hledání platnost limitu zaručuje; tahle kontrola je jen
       // pojistka na kompletním rozvrhu, protože logika výjimek je netriviální.
-      if (dayLimit != null) {
+      if (hasLimit) {
         for (const parityKey of ['odd', 'even']) {
-          if (countDays(chosen, parityKey, exemptCodes) > dayLimit) return;
+          const limit = limits[parityKey];
+          if (limit == null) continue;
+          if (countDays(chosen, parityKey, exemptCodes) > limit) return;
         }
       }
       schedules.push(chosen.slice());

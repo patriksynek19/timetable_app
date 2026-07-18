@@ -181,6 +181,9 @@ Rozvrh, který poruší kterékoli tvrdé omezení, je neplatný.
    během čtrnácti dnů navštívit více různých dnů, pokud v žádném jednotlivém týdnu
    nepřekročí N (příklad: v lichém týdnu pondělí a úterý, v sudém úterý a středa, při
    limitu N rovno 2).
+   [POŽADAVEK, rozhodnuto] V rozhraní se výchozí zadává jeden společný limit na
+   týden; volitelně si uživatel může rozkliknout odlišné limity pro lichý a sudý
+   týden (například lichý 1 den, sudý 3 dny).
 
 5. [POŽADAVEK] **Ukotvené skupiny.** Skupina ručně ukotvená uživatelem (sekce 7) je
    ve výsledku pevně a nemění se; aplikace dopočítá zbytek rozvrhu okolo ní.

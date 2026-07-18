@@ -240,6 +240,31 @@ test('SOLVER: limit dnů platí i pro variantu A (bez automatické výjimky)', (
   const r = solve(courses, { dayLimit: 1 });
   assertEqual(r.status, 'infeasible', 'dvě varianty A na dvou dnech při N=1');
 });
+test('SOLVER: odlišné limity pro lichý a sudý týden (dayLimits)', () => {
+  // Dva čtrnáctidenní předměty v lichém týdnu na různých dnech.
+  const courses = [
+    mkCourse('A', [mkGroup('A', '01', 'Po', 'odd', '10:00', '11:40')]),
+    mkCourse('B', [mkGroup('B', '01', 'Út', 'odd', '10:00', '11:40')]),
+    mkCourse('C', [mkGroup('C', '01', 'St', 'even', '10:00', '11:40')]),
+  ];
+  const strict = solve(courses, { dayLimits: { odd: 1, even: 3 } });
+  assertEqual(strict.status, 'infeasible', '2 liché dny při odd=1');
+  const loose = solve(courses, { dayLimits: { odd: 2, even: 1 } });
+  assertEqual(loose.status, 'ok', 'odd=2, even=1 sedí');
+  const oddOnly = solve(courses, { dayLimits: { odd: 2, even: null } });
+  assertEqual(oddOnly.status, 'ok', 'null = bez limitu pro sudý týden');
+});
+test('SOLVER: dayLimits má přednost, týdenní skupina se počítá v obou týdnech', () => {
+  const courses = [
+    mkCourse('A', [mkGroup('A', '01', 'Po', 'weekly', '10:00', '11:40')]),
+    mkCourse('B', [mkGroup('B', '01', 'Út', 'even', '10:00', '11:40')]),
+  ];
+  // Sudý týden má Po (týdenní) + Út = 2 dny.
+  const r = solve(courses, { dayLimits: { odd: 1, even: 1 } });
+  assertEqual(r.status, 'infeasible', 'even=1 nestačí');
+  const r2 = solve(courses, { dayLimits: { odd: 1, even: 2 } });
+  assertEqual(r2.status, 'ok', 'even=2 stačí');
+});
 test('SOLVER: countDays počítá týdenní skupinu v obou paritách', () => {
   const groups = [
     mkGroup('A', '01', 'Po', 'weekly', '10:00', '11:40'),

@@ -16,7 +16,10 @@ const PARITY_LABEL = { odd: 'lichý týden', even: 'sudý týden', weekly: '' };
 const state = {
   courses: [],
   teacherPrefs: {}, // kód -> { wanted: [], unwanted: [] }
-  dayLimit: null,
+  dayLimit: null, // společný limit pro oba týdny
+  dayLimitSplit: false, // true = odlišné limity pro lichý a sudý týden
+  dayLimitOdd: null,
+  dayLimitEven: null,
   blocked: new Set(), // "den|blok"
   exceptions: new Set(), // kódy předmětů s výjimkou z limitu dnů
   anchors: {}, // kód -> id skupiny
@@ -33,6 +36,9 @@ function saveState() {
     courses: state.courses,
     teacherPrefs: state.teacherPrefs,
     dayLimit: state.dayLimit,
+    dayLimitSplit: state.dayLimitSplit,
+    dayLimitOdd: state.dayLimitOdd,
+    dayLimitEven: state.dayLimitEven,
     blocked: [...state.blocked],
     exceptions: [...state.exceptions],
     anchors: state.anchors,
@@ -49,6 +55,9 @@ function loadState() {
     state.courses = data.courses ?? [];
     state.teacherPrefs = data.teacherPrefs ?? {};
     state.dayLimit = data.dayLimit ?? null;
+    state.dayLimitSplit = data.dayLimitSplit ?? false;
+    state.dayLimitOdd = data.dayLimitOdd ?? null;
+    state.dayLimitEven = data.dayLimitEven ?? null;
     state.blocked = new Set(data.blocked ?? []);
     state.exceptions = new Set(data.exceptions ?? []);
     state.anchors = data.anchors ?? {};
@@ -389,22 +398,23 @@ function checkboxRow(labelText, checked, onChange) {
 // ---------- mřížka blokovaných časů ----------
 
 function renderBlockedGrid() {
+  // Stejná orientace jako výsledný rozvrh (8.2): svisle dny, vodorovně časy.
   const table = el('blocked-grid');
   table.replaceChildren();
   const head = document.createElement('tr');
   head.append(document.createElement('th'));
-  for (const day of DAYS) {
+  for (const block of BLOCKS) {
     const th = document.createElement('th');
-    th.textContent = day;
+    th.textContent = timeLabel(block);
     head.append(th);
   }
   table.append(head);
-  for (const block of BLOCKS) {
+  for (const day of DAYS) {
     const tr = document.createElement('tr');
     const th = document.createElement('th');
-    th.textContent = timeLabel(block);
+    th.textContent = day;
     tr.append(th);
-    for (const day of DAYS) {
+    for (const block of BLOCKS) {
       const key = `${day}|${block}`;
       const td = document.createElement('td');
       const b = document.createElement('button');
@@ -448,7 +458,9 @@ function buildSettings() {
   }
   return {
     blockedTimes,
-    dayLimit: state.dayLimit,
+    ...(state.dayLimitSplit
+      ? { dayLimits: { odd: state.dayLimitOdd, even: state.dayLimitEven } }
+      : { dayLimit: state.dayLimit }),
     dayLimitExceptions: [...state.exceptions],
     anchoredGroups: state.anchors,
   };
@@ -498,6 +510,7 @@ function renderResults(r, elapsed) {
     message('ok', `Hotovo za ${elapsed} ms. Nalezené varianty seřazené podle skóre:`)
   );
 
+  const bestTotal = r.variants[0]?.score.total ?? 0;
   r.variants.forEach((v, i) => {
     const card = document.createElement('div');
     card.className = 'variant';
@@ -507,9 +520,15 @@ function renderResults(r, elapsed) {
     const title = document.createElement('strong');
     title.textContent = `Varianta ${i + 1}`;
     header.append(title);
+    // Absolutní hodnota skóre nic neříká (skoro vše jsou postihy), smysl
+    // mají jen rozdíly — zobrazuje se proto odstup od nejlepší varianty.
     const score = document.createElement('span');
     score.className = 'score';
-    score.textContent = `skóre ${v.score.total}`;
+    const diff = bestTotal - v.score.total;
+    if (i === 0) score.textContent = 'nejlepší skóre';
+    else if (diff === 0) score.textContent = 'stejné skóre jako nejlepší';
+    else score.textContent = `o ${diff} b. horší než nejlepší`;
+    score.title = `interní skóre ${v.score.total}`;
     header.append(score);
     for (const tag of v.tags) {
       const badge = document.createElement('span');
@@ -579,6 +598,26 @@ el('day-limit').addEventListener('change', (e) => {
   state.dayLimit = e.target.value ? Number(e.target.value) : null;
   saveState();
 });
+el('day-limit-split').addEventListener('change', (e) => {
+  state.dayLimitSplit = e.target.checked;
+  syncDayLimitControls();
+  saveState();
+});
+el('day-limit-odd').addEventListener('change', (e) => {
+  state.dayLimitOdd = e.target.value ? Number(e.target.value) : null;
+  saveState();
+});
+el('day-limit-even').addEventListener('change', (e) => {
+  state.dayLimitEven = e.target.value ? Number(e.target.value) : null;
+  saveState();
+});
+
+/** Zobrazí buď společný limit, nebo dvojici limitů podle parity. */
+function syncDayLimitControls() {
+  el('day-limit-split').checked = state.dayLimitSplit;
+  el('day-limit-split-controls').classList.toggle('hidden', !state.dayLimitSplit);
+  el('day-limit').disabled = state.dayLimitSplit;
+}
 el('compute').addEventListener('click', compute);
 el('clear-all').addEventListener('click', () => {
   if (!confirm('Opravdu vymazat všechny předměty a nastavení?')) return;
@@ -586,11 +625,17 @@ el('clear-all').addEventListener('click', () => {
   state.courses = [];
   state.teacherPrefs = {};
   state.dayLimit = null;
+  state.dayLimitSplit = false;
+  state.dayLimitOdd = null;
+  state.dayLimitEven = null;
   state.blocked = new Set();
   state.exceptions = new Set();
   state.anchors = {};
   state.lectureBlock = new Set();
   el('day-limit').value = '';
+  el('day-limit-odd').value = '';
+  el('day-limit-even').value = '';
+  syncDayLimitControls();
   el('upload-messages').replaceChildren();
   el('results').replaceChildren();
   el('status').replaceChildren();
@@ -600,6 +645,9 @@ el('clear-all').addEventListener('click', () => {
 
 loadState();
 el('day-limit').value = state.dayLimit ?? '';
+el('day-limit-odd').value = state.dayLimitOdd ?? '';
+el('day-limit-even').value = state.dayLimitEven ?? '';
+syncDayLimitControls();
 renderCourses();
 renderBlockedGrid();
 

@@ -69,6 +69,10 @@ button.primary:hover { filter: brightness(1.1); }
 
 .actions { display: flex; gap: 0.5rem; }
 
+.constraint-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
+.split-toggle { color: var(--muted); font-size: 0.9rem; }
+.hidden { display: none; }
+
 /* Karty předmětů */
 .course {
   border: 1px solid var(--line);

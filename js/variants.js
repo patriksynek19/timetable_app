@@ -22,6 +22,7 @@ import {
   countDays,
   prepareDomains,
   orderDomains,
+  dayLimitsOf,
 } from './solver.js';
 import {
   DEFAULT_PARAMS,
@@ -49,7 +50,8 @@ import {
  */
 export function findVariants(courses, settings = {}, prefs = {}, options = {}) {
   const params = { ...DEFAULT_PARAMS, ...(options.params ?? {}) };
-  const { dayLimit = null } = settings;
+  const limits = dayLimitsOf(settings);
+  const hasLimit = limits.odd != null || limits.even != null;
 
   const prep = prepareDomains(courses, settings);
   const base = { errors: prep.errors, warnings: prep.warnings, variants: [] };
@@ -114,9 +116,11 @@ export function findVariants(courses, settings = {}, prefs = {}, options = {}) {
     entry.score.breakdown.days + entry.score.breakdown.shape;
 
   const record = (chosen) => {
-    if (dayLimit != null) {
+    if (hasLimit) {
       for (const parityKey of ['odd', 'even']) {
-        if (countDays(chosen, parityKey, exemptCodes) > dayLimit) return;
+        const limit = limits[parityKey];
+        if (limit == null) continue;
+        if (countDays(chosen, parityKey, exemptCodes) > limit) return;
       }
     }
     const entry = {
@@ -147,9 +151,11 @@ export function findVariants(courses, settings = {}, prefs = {}, options = {}) {
   };
 
   const withinDayLimit = (chosen, candidate) => {
-    if (dayLimit == null) return true;
+    if (!hasLimit) return true;
     for (const parityKey of ['odd', 'even']) {
-      if (countDays([...chosen, candidate], parityKey, exemptCodes) > dayLimit) {
+      const limit = limits[parityKey];
+      if (limit == null) continue;
+      if (countDays([...chosen, candidate], parityKey, exemptCodes) > limit) {
         return false;
       }
     }

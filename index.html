@@ -26,9 +26,32 @@
   <section>
     <h2>2. Omezení a preference</h2>
     <div class="constraint-row">
-      <label for="day-limit">Limit dnů ve škole za týden (platí zvlášť pro
-      lichý a sudý týden):</label>
+      <label for="day-limit">Limit dnů ve škole za týden:</label>
       <select id="day-limit">
+        <option value="">bez limitu</option>
+        <option value="1">1 den</option>
+        <option value="2">2 dny</option>
+        <option value="3">3 dny</option>
+        <option value="4">4 dny</option>
+        <option value="5">5 dnů</option>
+      </select>
+      <label class="split-toggle">
+        <input type="checkbox" id="day-limit-split">
+        nastavit zvlášť pro lichý a sudý týden
+      </label>
+    </div>
+    <div class="constraint-row hidden" id="day-limit-split-controls">
+      <label for="day-limit-odd">Lichý týden:</label>
+      <select id="day-limit-odd">
+        <option value="">bez limitu</option>
+        <option value="1">1 den</option>
+        <option value="2">2 dny</option>
+        <option value="3">3 dny</option>
+        <option value="4">4 dny</option>
+        <option value="5">5 dnů</option>
+      </select>
+      <label for="day-limit-even">Sudý týden:</label>
+      <select id="day-limit-even">
         <option value="">bez limitu</option>
         <option value="1">1 den</option>
         <option value="2">2 dny</option>
