@@ -602,3 +602,6 @@ loadState();
 el('day-limit').value = state.dayLimit ?? '';
 renderCourses();
 renderBlockedGrid();
+
+// Příznak pro hlídku v index.html: kód aplikace se úspěšně načetl.
+window.__appLoaded = true;

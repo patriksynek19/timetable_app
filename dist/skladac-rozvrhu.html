@@ -1,0 +1,2129 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skladač rozvrhu z IS MU</title>
+<style>
+/* Střídmá barevnost dle CLAUDE.md 8.2. */
+:root {
+  --ink: #1f2328;
+  --muted: #59636e;
+  --line: #d1d9e0;
+  --bg: #f6f8fa;
+  --card: #ffffff;
+  --accent: #0969da;
+  --ok: #1a7f37;
+  --warn-bg: #fff8c5;
+  --warn-ink: #9a6700;
+  --err-bg: #ffebe9;
+  --err-ink: #cf222e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  margin: 0;
+  line-height: 1.5;
+}
+
+header, main, footer {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+header { padding-top: 2rem; }
+header h1 { margin-bottom: 0.25rem; }
+header p { color: var(--muted); margin-top: 0; }
+
+footer {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding-bottom: 2rem;
+}
+
+section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+
+h2 { margin-top: 0; }
+.hint { color: var(--muted); font-size: 0.9rem; }
+
+button {
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+}
+button:hover { background: var(--bg); }
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+button.primary:hover { filter: brightness(1.1); }
+
+.actions { display: flex; gap: 0.5rem; }
+
+/* Karty předmětů */
+.course {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+.course-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.course-header strong { font-size: 1.05rem; }
+.course-header .spacer { flex: 1; }
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-ink); }
+.badge.info { background: #ddf4ff; color: var(--accent); border-color: var(--accent); }
+
+.course-controls {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.92rem;
+}
+.control-label { color: var(--muted); margin-right: 0.35rem; }
+
+.teacher-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.tri {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.tri button {
+  border: 0;
+  border-radius: 0;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.8rem;
+}
+.tri button + button { border-left: 1px solid var(--line); }
+.tri button.active-want { background: #ddf4ff; color: var(--accent); font-weight: 600; }
+.tri button.active-avoid { background: var(--err-bg); color: var(--err-ink); font-weight: 600; }
+.tri button.active-neutral { background: var(--bg); font-weight: 600; }
+
+.remove-course { color: var(--err-ink); }
+
+/* Mřížka blokovaných časů */
+#blocked-grid { border-collapse: collapse; }
+#blocked-grid th, #blocked-grid td {
+  border: 1px solid var(--line);
+  padding: 0;
+  text-align: center;
+}
+#blocked-grid th { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+#blocked-grid td button {
+  border: 0;
+  border-radius: 0;
+  width: 100%;
+  min-width: 4.5rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+#blocked-grid td button.blocked {
+  background: var(--err-bg);
+  color: var(--err-ink);
+  font-weight: 600;
+}
+
+/* Hlášky */
+.msg { border-radius: 6px; padding: 0.5rem 0.75rem; margin: 0.5rem 0; font-size: 0.9rem; }
+.msg.error { background: var(--err-bg); color: var(--err-ink); }
+.msg.warning { background: var(--warn-bg); color: var(--warn-ink); }
+.msg.ok { color: var(--ok); }
+
+/* Varianty */
+.variant {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+.variant-header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.variant-header .score { font-weight: 700; }
+.variant .breakdown { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0; }
+.variant ul { margin: 0.5rem 0 0; padding-left: 1.25rem; font-size: 0.92rem; }
+.variant li { margin: 0.15rem 0; }
+.variant .parity-note { color: var(--muted); }
+
+/* Mřížka rozvrhu (8.2) */
+.grid-wrap { overflow-x: auto; margin-top: 0.5rem; }
+.timetable {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 44rem;
+  font-size: 0.72rem;
+}
+.timetable th, .timetable td {
+  border: 1px solid var(--line);
+  padding: 0.2rem 0.3rem;
+  vertical-align: top;
+  text-align: left;
+}
+.timetable thead th {
+  background: var(--bg);
+  text-align: center;
+  font-size: 0.75rem;
+}
+.timetable th.day {
+  background: var(--bg);
+  font-size: 0.9rem;
+  text-align: center;
+  vertical-align: middle;
+  width: 2.2rem;
+}
+.timetable th.parity {
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 0.68rem;
+  width: 2.6rem;
+  vertical-align: middle;
+}
+.timetable td.empty { background: #fbfcfd; }
+.timetable tr.row-even td.empty { background: #f3f5f7; }
+.timetable td.cell { background: #ddf4ff33; }
+.timetable td.cell.weekly { background: #ddf4ff66; vertical-align: middle; }
+.timetable td.cell strong { display: block; white-space: nowrap; }
+.timetable .c-name {
+  color: var(--muted);
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timetable .c-detail { white-space: nowrap; }
+
+.variant-footer { margin-top: 0.5rem; }
+
+/* Export: tisk jediné vybrané varianty na ležato (8.4). Uložení do PDF
+   nabízí tiskový dialog prohlížeče. */
+@media print {
+  @page { size: A4 landscape; margin: 1cm; }
+  header p, footer, section:nth-of-type(1), section:nth-of-type(2),
+  .actions, #status, .msg, .variant-footer { display: none !important; }
+  body.has-print-target .variant:not(.print-target) { display: none; }
+  body { background: #fff; }
+  section, .variant { border: none; padding: 0; margin: 0; }
+  .grid-wrap { overflow: visible; }
+  .timetable { min-width: 0; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Skladač rozvrhu z IS MU</h1>
+  <p>Nahraj uložené stránky předmětů z katalogu, nastav preference a nech si
+  sestavit optimální rozvrh seminárních skupin.</p>
+</header>
+<main>
+  <section>
+    <h2>1. Předměty</h2>
+    <p class="hint">Nahraj uložené stránky „Informace o předmětu“ z katalogu
+    IS MU (jeden soubor HTML na předmět). Očekávané období:
+    <strong id="expected-period"></strong>.</p>
+    <input type="file" id="file-input" accept=".html,.htm" multiple>
+    <div id="upload-messages"></div>
+    <div id="courses"></div>
+  </section>
+
+  <section>
+    <h2>2. Omezení a preference</h2>
+    <div class="constraint-row">
+      <label for="day-limit">Limit dnů ve škole za týden (platí zvlášť pro
+      lichý a sudý týden):</label>
+      <select id="day-limit">
+        <option value="">bez limitu</option>
+        <option value="1">1 den</option>
+        <option value="2">2 dny</option>
+        <option value="3">3 dny</option>
+        <option value="4">4 dny</option>
+        <option value="5">5 dnů</option>
+      </select>
+    </div>
+    <h3>Blokované časy</h3>
+    <p class="hint">Klikni na bloky, ve kterých nechceš mít výuku. Blokace platí
+    pro lichý i sudý týden.</p>
+    <table id="blocked-grid"></table>
+  </section>
+
+  <section>
+    <h2>3. Výsledek</h2>
+    <div class="actions">
+      <button id="compute" class="primary">Sestavit rozvrh</button>
+      <button id="clear-all">Vymazat vše</button>
+    </div>
+    <div id="status"></div>
+    <div id="results"></div>
+  </section>
+</main>
+<footer>
+  <p>Aplikace běží celá v prohlížeči, nic se nikam neodesílá. Kapacitu skupin
+  a stav zápisu neřeší — zkontroluj před zápisem v IS.</p>
+</footer>
+<script>
+// Hlídka: ES moduly otevřené přímo ze složky (file://) prohlížeč zablokuje
+// a stránka by mlčky nefungovala. Místo ticha poradíme, co použít.
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    if (window.__appLoaded) return;
+    const box = document.createElement('div');
+    box.className = 'msg error';
+    box.textContent =
+      'Aplikace se nespustila. Otevřel jsi vývojový index.html přímo ze ' +
+      'složky (adresa file://) a prohlížeč kvůli bezpečnosti zablokoval ' +
+      'načtení kódu. Použij místo toho soubor dist/skladac-rozvrhu.html — ' +
+      'ten funguje otevřený odkudkoli. (Vývojová verze běží přes lokální ' +
+      'server: python3 test/serve.py a pak http://localhost:8123.)';
+    document.querySelector('main').prepend(box);
+  }, 400);
+});
+</script>
+<script>
+const __m = {};
+__m['parser.js'] = (() => {
+'use strict';
+/**
+ * Parser uložených HTML stránek "Informace o předmětu" z katalogu IS MU.
+ * Chování viz CLAUDE.md, sekce 3 (vstup dat a parsing) a 4 (datový model).
+ *
+ * Pracuje přímo s textem HTML, bez DOM. Řádky seminárních skupin nejsou
+ * v katalogu samostatné elementy, ale text oddělený <BR>, takže textový
+ * přístup je věcně přiléhavější a parser jde spustit i mimo prohlížeč.
+ */
+
+const DAYS = ['Po', 'Út', 'St', 'Čt', 'Pá'];
+
+// Všech pět skloňovaných tvarů parity podle rodu dne (CLAUDE.md 3.2 bod 3).
+const PARITY_FORMS = new Map([
+  ['každé liché pondělí', { parity: 'odd', day: 'Po' }],
+  ['každé sudé pondělí', { parity: 'even', day: 'Po' }],
+  ['každé liché úterý', { parity: 'odd', day: 'Út' }],
+  ['každé sudé úterý', { parity: 'even', day: 'Út' }],
+  ['každou lichou středu', { parity: 'odd', day: 'St' }],
+  ['každou sudou středu', { parity: 'even', day: 'St' }],
+  ['každý lichý čtvrtek', { parity: 'odd', day: 'Čt' }],
+  ['každý sudý čtvrtek', { parity: 'even', day: 'Čt' }],
+  ['každý lichý pátek', { parity: 'odd', day: 'Pá' }],
+  ['každý sudý pátek', { parity: 'even', day: 'Pá' }],
+]);
+
+const HEADING = 'Rozvrh seminárních/paralelních skupin';
+const UNSCHEDULED_TEXT = 'Rozvrh nebyl do ISu vložen';
+const TIME_PART = '(\\d{1,2}:\\d{2})[–-](\\d{1,2}:\\d{2})';
+const PARITY_TIME_RE = new RegExp(
+  `(${[...PARITY_FORMS.keys()].join('|')}) ${TIME_PART}`
+);
+const WEEKLY_TIME_RE = new RegExp(`(Po|Út|St|Čt|Pá) ${TIME_PART}`);
+const GROUP_ID_RE = /([A-Za-z0-9]+)\/(\d+):/;
+const ROOM_RE = /<A[^>]*class="?okno"?[^>]*>([^<]*)<\/A>/i;
+const TEACHER_RE = /,\s*<I>([^<]*)<\/I>/i;
+const CANONICAL_RE =
+  /<link\s+rel="canonical"\s+href="https:\/\/is\.muni\.cz\/(?:auth\/)?predmet\/([^"/]+)\/([^"/]+)\/([^"/]+)"/;
+const TITLE_RE = /<title>([^<]*)<\/title>/i;
+const LANGUAGE_RE = /Vyučovací jazyk<\/B><\/DT>\s*<DD>([^<]+)/i;
+const TITLE_SUFFIX = ' - Informace o předmětu';
+
+/** Rozloží řetězec období, například "podzim2026". Vrací null při neshodě. */
+function parsePeriod(raw) {
+  const m = /^(podzim|jaro)(\d{4})$/.exec(raw);
+  if (!m) return null;
+  return { raw, term: m[1], year: Number(m[2]) };
+}
+
+/** Porovnatelná hodnota období: vyšší = pozdější. Jaro předchází podzimu. */
+function periodOrdinal(period) {
+  return period.year * 2 + (period.term === 'podzim' ? 1 : 0);
+}
+
+/**
+ * Odhad nadcházejícího semestru z data (CLAUDE.md 3.3, rozhodnuto):
+ * únor patří ještě jaru a září ještě podzimu, protože rozvrhy nadcházejícího
+ * semestru se mohou měnit na poslední chvíli.
+ */
+function expectedPeriod(date = new Date()) {
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  if (m >= 3 && m <= 9) {
+    return { raw: `podzim${y}`, term: 'podzim', year: y };
+  }
+  const year = m >= 10 ? y + 1 : y;
+  return { raw: `jaro${year}`, term: 'jaro', year };
+}
+
+function toMinutes(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function stripTags(html) {
+  return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Zpracuje jeden textový řádek skupiny. Vrací:
+ *  - { group }         pro platnou skupinu s rozvrhem,
+ *  - { unscheduledId } pro skupinu bez rozvrhu (zahazuje se, CLAUDE.md 3.5),
+ *  - null              pro řádek, který nejde přečíst (zapíše warning).
+ */
+function parseGroupLine(line, warnings) {
+  const idMatch = GROUP_ID_RE.exec(line);
+  if (!idMatch) return null;
+  const id = `${idMatch[1]}/${idMatch[2]}`;
+
+  if (line.includes(UNSCHEDULED_TEXT)) {
+    return { unscheduledId: id };
+  }
+
+  const rest = line.slice(idMatch.index + idMatch[0].length);
+
+  let parity;
+  let day;
+  let timeMatch;
+  const parityMatch = PARITY_TIME_RE.exec(rest);
+  if (parityMatch) {
+    ({ parity, day } = PARITY_FORMS.get(parityMatch[1]));
+    timeMatch = parityMatch.slice(2);
+  } else {
+    const weeklyMatch = WEEKLY_TIME_RE.exec(rest);
+    if (!weeklyMatch) {
+      warnings.push(
+        `Skupině ${id} se nepodařilo přečíst den a čas, řádek se přeskakuje: ` +
+          `"${stripTags(line)}"`
+      );
+      return null;
+    }
+    parity = 'weekly';
+    [, day] = weeklyMatch;
+    timeMatch = weeklyMatch.slice(2);
+  }
+
+  const allTimes = rest.match(/\d{1,2}:\d{2}[–-]\d{1,2}:\d{2}/g) ?? [];
+  if (allTimes.length > 1) {
+    warnings.push(
+      `Skupina ${id} má na řádku více časů (${allTimes.join(', ')}), ` +
+        `použit první. Zkontroluj prosím katalog.`
+    );
+  }
+
+  const roomMatch = ROOM_RE.exec(rest);
+  if (!roomMatch) {
+    warnings.push(`Skupina ${id} nemá v katalogu uvedenou místnost.`);
+  }
+  const teacherMatch = TEACHER_RE.exec(rest);
+
+  const [start, end] = timeMatch;
+  return {
+    group: {
+      id,
+      courseCode: idMatch[1],
+      number: idMatch[2],
+      day,
+      dayIndex: DAYS.indexOf(day),
+      parity,
+      start,
+      end,
+      startMin: toMinutes(start),
+      endMin: toMinutes(end),
+      room: roomMatch ? roomMatch[1].trim() : null,
+      teacher: teacherMatch ? teacherMatch[1].trim() : null,
+    },
+  };
+}
+
+/**
+ * Rozvrh přednášek z pole "Rozvrh" (pro volitelné vyhrazení časů přednášek,
+ * CLAUDE.md sekce 7). Blok začíná <DT><B>Rozvrh</B></DT> a končí nadpisem
+ * seminárních skupin nebo dalším polem katalogu.
+ *
+ * Položky mají tvar: parita+čas ("každé sudé pondělí 8:00–9:40"), den+datum+čas
+ * ("St 25. 11. 16:00–17:40", nepravidelná přednáška), den+čas ("Út 8:00–9:40",
+ * pravidelná týdenní) nebo samotný čas (pokračování předchozího dne). Rozsah
+ * semestru ("Po 21. 9. až Pá 18. 12.") se nechytne, protože za datem nemá čas.
+ */
+const LECTURE_DT_RE = /<DT><B>Rozvrh<\/B><\/DT>/i;
+const LECTURE_TOKEN_RE = new RegExp(
+  `(?<par>${[...PARITY_FORMS.keys()].join('|')})\\s+(?<ps>\\d{1,2}:\\d{2})[–-](?<pe>\\d{1,2}:\\d{2})` +
+    '|(?<dday>Po|Út|St|Čt|Pá)\\s+(?<ddate>\\d{1,2}\\.\\s?\\d{1,2}\\.)\\s+(?<ds>\\d{1,2}:\\d{2})[–-](?<de>\\d{1,2}:\\d{2})' +
+    '|(?<wday>Po|Út|St|Čt|Pá)\\s+(?<ws>\\d{1,2}:\\d{2})[–-](?<we>\\d{1,2}:\\d{2})' +
+    '|(?<bs>\\d{1,2}:\\d{2})[–-](?<be>\\d{1,2}:\\d{2})',
+  'g'
+);
+
+function extractLectures(html) {
+  const dtMatch = LECTURE_DT_RE.exec(html);
+  if (!dtMatch) return [];
+  const start = dtMatch.index + dtMatch[0].length;
+  const ends = [html.indexOf(HEADING, start), html.indexOf('<DT>', start)]
+    .filter((i) => i !== -1);
+  const end = ends.length > 0 ? Math.min(...ends) : html.length;
+  const text = html.slice(start, end).replace(/<[^>]*>/g, ' ');
+
+  const byKey = new Map();
+  let lastDay = null;
+  let lastParity = 'weekly';
+  let lastDated = false;
+  for (const m of text.matchAll(LECTURE_TOKEN_RE)) {
+    const g = m.groups;
+    let day;
+    let parity;
+    let dated;
+    let startText;
+    let endText;
+    if (g.par) {
+      ({ parity, day } = PARITY_FORMS.get(g.par));
+      dated = false;
+      [startText, endText] = [g.ps, g.pe];
+    } else if (g.dday) {
+      [day, parity, dated] = [g.dday, 'weekly', true];
+      [startText, endText] = [g.ds, g.de];
+    } else if (g.wday) {
+      [day, parity, dated] = [g.wday, 'weekly', false];
+      [startText, endText] = [g.ws, g.we];
+    } else if (lastDay) {
+      [day, parity, dated] = [lastDay, lastParity, lastDated];
+      [startText, endText] = [g.bs, g.be];
+    } else {
+      continue; // osamocený čas bez dne nejde zablokovat
+    }
+    lastDay = day;
+    lastParity = parity;
+    lastDated = dated;
+    const key = `${day}|${parity}|${startText}|${endText}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.dated = existing.dated || dated;
+    } else {
+      byKey.set(key, {
+        day,
+        parity,
+        start: startText,
+        end: endText,
+        startMin: toMinutes(startText),
+        endMin: toMinutes(endText),
+        dated,
+      });
+    }
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * Najde blok skupin za nadpisem "Rozvrh seminárních/paralelních skupin"
+ * a rozřeže ho na řádky. Blok končí dalším <DT> (další pole katalogu).
+ */
+function extractGroups(html, warnings) {
+  const headingIdx = html.indexOf(HEADING);
+  if (headingIdx === -1) {
+    return { hasSeminars: false, groups: [], unscheduledIds: [] };
+  }
+  let end = html.indexOf('<DT>', headingIdx);
+  if (end === -1) end = html.length;
+  const block = html.slice(headingIdx + HEADING.length, end);
+
+  const groups = [];
+  const unscheduledIds = [];
+  for (const segment of block.split(/<BR>|<\/DD>/i)) {
+    if (!GROUP_ID_RE.test(segment)) continue;
+    const parsed = parseGroupLine(segment, warnings);
+    if (!parsed) continue;
+    if (parsed.unscheduledId) {
+      unscheduledIds.push(parsed.unscheduledId);
+    } else {
+      groups.push(parsed.group);
+    }
+  }
+  return { hasSeminars: true, groups, unscheduledIds };
+}
+
+/**
+ * Hlavní vstup parseru. Přijímá text uložené stránky, vrací
+ * { ok, errors, warnings, course }. Při chybě je course null a předmět
+ * se nemá zpracovat jako platný vstup (CLAUDE.md 3.3).
+ */
+function parseCourseHtml(html) {
+  const errors = [];
+  const warnings = [];
+
+  const canonical = CANONICAL_RE.exec(html);
+  if (!canonical) {
+    errors.push(
+      'V souboru chybí odkaz <link rel="canonical"> na katalog IS MU. ' +
+        'Je to opravdu uložená stránka "Informace o předmětu"?'
+    );
+    return { ok: false, errors, warnings, course: null };
+  }
+  const [, faculty, periodRaw, code] = canonical;
+  const period = parsePeriod(periodRaw);
+  if (!period) {
+    errors.push(
+      `Období "${periodRaw}" v odkazu na katalog nemá tvar podzim<rok> ` +
+        'ani jaro<rok>.'
+    );
+    return { ok: false, errors, warnings, course: null };
+  }
+
+  let name = code;
+  const titleMatch = TITLE_RE.exec(html);
+  if (titleMatch) {
+    const title = titleMatch[1];
+    const suffixIdx = title.lastIndexOf(TITLE_SUFFIX);
+    const withoutSuffix =
+      suffixIdx === -1 ? title : title.slice(0, suffixIdx);
+    const codePrefix = `${code} `;
+    const colonIdx = withoutSuffix.indexOf(':');
+    const afterFaculty =
+      colonIdx === -1 ? withoutSuffix : withoutSuffix.slice(colonIdx + 1);
+    if (afterFaculty.startsWith(codePrefix)) {
+      name = afterFaculty.slice(codePrefix.length).trim();
+    } else {
+      warnings.push(
+        `Titulek stránky ("${title}") neodpovídá kódu předmětu ${code} ` +
+          'z odkazu na katalog.'
+      );
+    }
+  } else {
+    warnings.push('Stránka nemá titulek, jako název předmětu se použije kód.');
+  }
+
+  // Pole "Vyučovací jazyk" je přítomné jen u předmětů nevyučovaných česky;
+  // chybějící pole znamená češtinu (CLAUDE.md 3.4).
+  const languageMatch = LANGUAGE_RE.exec(html);
+  const language = languageMatch ? languageMatch[1].trim() : 'Čeština';
+
+  const { hasSeminars, groups, unscheduledIds } = extractGroups(
+    html,
+    warnings
+  );
+  const lectures = extractLectures(html);
+
+  return {
+    ok: true,
+    errors,
+    warnings,
+    course: {
+      code,
+      name,
+      faculty,
+      period,
+      language,
+      hasSeminars,
+      groups,
+      unscheduledIds,
+      singleGroup: groups.length === 1,
+      lectures,
+      hasIrregularLectures: lectures.some((l) => l.dated),
+    },
+  };
+}
+
+return {DAYS, parsePeriod, periodOrdinal, expectedPeriod, parseCourseHtml};
+})();
+__m['scoring.js'] = (() => {
+'use strict';
+/**
+ * Měkké preference a skórování rozvrhů (CLAUDE.md sekce 6).
+ *
+ * Vyšší skóre = atraktivnější rozvrh; postihy jsou záporné příspěvky.
+ * Konkrétní hodnoty jsou [PARAMETR] k doladění na reálných datech (sekce 11) —
+ * proto jsou všechny pohromadě v DEFAULT_PARAMS a každá funkce je přijímá
+ * jako argument.
+ */
+
+const DEFAULT_PARAMS = {
+  // 6.1 kaskáda priorit (od nejvyšší váhy)
+  unwantedTeacherPenalty: -1000, // nejvyšší váha, ale ne tvrdý zákaz
+  wantedTeacherBonus: 300, // vysoká váha
+  dayPenalty: -150, // vysoká váha: každý obsazený den, zvlášť v každé paritě
+  preferredTimeBonus: 20, // nižší váha
+  // 6.2 tvarová pravidla dne. Řada 2–3 bloků je zdarma; postih za řadu 4 musí
+  // zůstat větší než cena prvního okna, aby 2+2 s pauzou porazilo 4 v řadě
+  // a zároveň 3 v řadě porazily 2+1 s oknem.
+  runPenalties: { 4: -60, 5: -250 }, // delší řady: -250 + krok za blok navíc
+  runPenaltyStep: -200,
+  windowPenalties: [-40, -120, -300], // 1., 2., 3. okno
+  windowPenaltyStep: -200, // každé okno nad tabulku (roste přísně)
+  longDayBlocks: 6, // [PARAMETR] od kolika bloků rozpětí je den „dlouhý"
+  // mřížka výukových bloků (CLAUDE.md sekce 2: dvouhodinové bloky od 8:00)
+  dayStartMin: 480,
+  blockMinutes: 120,
+};
+
+const normName = (s) => s.trim().toLowerCase();
+
+/** Indexy výukových bloků, které skupina zabírá (0 = blok od 8:00). */
+function groupBlocks(group, params = DEFAULT_PARAMS) {
+  const first = Math.floor(
+    (group.startMin - params.dayStartMin) / params.blockMinutes
+  );
+  const last = Math.floor(
+    (group.endMin - 1 - params.dayStartMin) / params.blockMinutes
+  );
+  const blocks = [];
+  for (let k = first; k <= last; k++) blocks.push(k);
+  return blocks;
+}
+
+/**
+ * Tvar jednoho dne (CLAUDE.md 6.2) z indexů obsazených bloků.
+ * Vrací { penalty, windows, longestRun }.
+ *
+ * Okno = každý přeskočený volný blok mezi obsazenými bloky téhož dne;
+ * mezera dvou volných bloků jsou tedy dvě okna. Úleva pro dlouhý den:
+ * při rozpětí >= longDayBlocks se druhé okno trestá jen jako první.
+ */
+function dayShape(blockIndices, params = DEFAULT_PARAMS) {
+  const blocks = [...new Set(blockIndices)].sort((a, b) => a - b);
+  if (blocks.length === 0) return { penalty: 0, windows: 0, longestRun: 0 };
+  let penalty = 0;
+
+  // Řady: 2–3 zdarma, 4 mírný postih, 5+ velký a rostoucí s délkou.
+  let longestRun = 0;
+  let runLength = 1;
+  for (let i = 1; i <= blocks.length; i++) {
+    if (i < blocks.length && blocks[i] === blocks[i - 1] + 1) {
+      runLength++;
+      continue;
+    }
+    longestRun = Math.max(longestRun, runLength);
+    if (runLength === 4) penalty += params.runPenalties[4];
+    else if (runLength >= 5) {
+      penalty += params.runPenalties[5] + (runLength - 5) * params.runPenaltyStep;
+    }
+    runLength = 1;
+  }
+
+  const span = blocks[blocks.length - 1] - blocks[0] + 1;
+  const longDay = span >= params.longDayBlocks;
+  let windows = 0;
+  for (let i = 1; i < blocks.length; i++) {
+    for (let skipped = blocks[i] - blocks[i - 1] - 1; skipped > 0; skipped--) {
+      windows++;
+      const effective = longDay && windows === 2 ? 1 : windows;
+      const table = params.windowPenalties;
+      penalty +=
+        effective <= table.length
+          ? table[effective - 1]
+          : table[table.length - 1] +
+            (effective - table.length) * params.windowPenaltyStep;
+    }
+  }
+  return { penalty, windows, longestRun };
+}
+
+/** Jen postih tvaru dne — pohodlnější tvar pro testy a ladění. */
+function dayShapePenalty(blockIndices, params = DEFAULT_PARAMS) {
+  return dayShape(blockIndices, params).penalty;
+}
+
+/**
+ * Aditivní (na rozvrhu nezávislý) příspěvek jedné skupiny: vyučující (6.1
+ * body 1 a 2) a preferované časy. Skupina bez vyučujícího se preferencí
+ * nedotkne (CLAUDE.md 3.2). Vrací { teacher, preferred, total }.
+ *
+ * prefs: {
+ *   teachers: { kódPředmětu: { wanted: [jména], unwanted: [jména] } },
+ *   preferredTimes: [{ day?, startMin, endMin }],
+ * }
+ */
+function groupAdditiveScore(group, prefs = {}, params = DEFAULT_PARAMS) {
+  let teacher = 0;
+  const tp = prefs.teachers?.[group.courseCode];
+  if (group.teacher && tp) {
+    // Skupina může mít víc vyučujících najednou ("T. Kyselovská, D. Zafirelis");
+    // preference platí, když se trefí kterékoli jméno.
+    const names = group.teacher.split(',').map(normName);
+    if (tp.unwanted?.some((x) => names.includes(normName(x)))) {
+      teacher += params.unwantedTeacherPenalty;
+    }
+    if (tp.wanted?.some((x) => names.includes(normName(x)))) {
+      teacher += params.wantedTeacherBonus;
+    }
+  }
+  let preferred = 0;
+  for (const p of prefs.preferredTimes ?? []) {
+    if (
+      (p.day == null || p.day === group.day) &&
+      group.startMin >= p.startMin &&
+      group.endMin <= p.endMin
+    ) {
+      preferred = params.preferredTimeBonus;
+      break;
+    }
+  }
+  return { teacher, preferred, total: teacher + preferred };
+}
+
+/**
+ * Skóre celého rozvrhu. Každý den každé parity se hodnotí zvlášť a dílčí
+ * postihy se sčítají (6.2); týdenní skupina se počítá v obou týdnech.
+ *
+ * Vrací { total, breakdown: { teachers, preferredTimes, days, shape },
+ * details: { daysOdd, daysEven, windows, longestRun } } — podklad pro
+ * přehled hodnocení varianty (8.3).
+ */
+function scoreSchedule(schedule, prefs = {}, params = DEFAULT_PARAMS) {
+  let teachers = 0;
+  let preferredTimes = 0;
+  for (const g of schedule) {
+    const a = groupAdditiveScore(g, prefs, params);
+    teachers += a.teacher;
+    preferredTimes += a.preferred;
+  }
+
+  let shape = 0;
+  let windows = 0;
+  let longestRun = 0;
+  const daysByWeek = { odd: 0, even: 0 };
+  for (const week of ['odd', 'even']) {
+    const byDay = new Map();
+    for (const g of schedule) {
+      if (g.parity !== 'weekly' && g.parity !== week) continue;
+      if (!byDay.has(g.day)) byDay.set(g.day, []);
+      byDay.get(g.day).push(...groupBlocks(g, params));
+    }
+    daysByWeek[week] = byDay.size;
+    for (const blocks of byDay.values()) {
+      const s = dayShape(blocks, params);
+      shape += s.penalty;
+      windows += s.windows;
+      longestRun = Math.max(longestRun, s.longestRun);
+    }
+  }
+  const days = params.dayPenalty * (daysByWeek.odd + daysByWeek.even);
+
+  return {
+    total: teachers + preferredTimes + days + shape,
+    breakdown: { teachers, preferredTimes, days, shape },
+    details: {
+      daysOdd: daysByWeek.odd,
+      daysEven: daysByWeek.even,
+      windows,
+      longestRun,
+    },
+  };
+}
+
+return {DEFAULT_PARAMS, groupBlocks, dayShape, dayShapePenalty, groupAdditiveScore, scoreSchedule};
+})();
+__m['solver.js'] = (() => {
+'use strict';
+/**
+ * Tvrdá omezení a generátor přípustných kombinací (CLAUDE.md sekce 5).
+ *
+ * Řešič je přímý backtracking (CLAUDE.md 12): předměty seřazené od nejmenšího
+ * počtu skupin, průběžné ořezávání podle kolizí a limitu dnů. Vrací přípustné
+ * rozvrhy do zadaného stropu počtu řešení; bodované hledání nejlepších variant
+ * staví na stejných doménách v js/variants.js.
+ */
+
+/**
+ * Kolize dvou událostí s respektováním parity (CLAUDE.md 5 bod 2):
+ * stejný den, časový překryv a slučitelná parita. Skupiny opačné parity
+ * kolize nejsou, týdenní koliduje s čímkoli.
+ */
+function groupsConflict(a, b) {
+  if (a.day !== b.day) return false;
+  if (a.endMin <= b.startMin || b.endMin <= a.startMin) return false;
+  return a.parity === 'weekly' || b.parity === 'weekly' || a.parity === b.parity;
+}
+
+/**
+ * Blokovaný čas: { day, startMin, endMin, parity? }, bez parity platí
+ * pro oba týdny (chová se jako týdenní událost).
+ */
+function conflictsWithBlocked(group, blockedTimes) {
+  return blockedTimes.some((b) => groupsConflict(group, { parity: 'weekly', ...b }));
+}
+
+/**
+ * Počet obsazených dnů v týdnu dané parity ('odd' | 'even').
+ * Den, na kterém sedí předmět s ruční výjimkou z limitu (5.2), se do limitu
+ * nepočítá celý — i další předmět umístěný na tentýž den je pak „zdarma",
+ * protože ve škole ten den stejně jsi. Výjimka ale neospravedlní jiný, nový
+ * den. (Jemnost „radši plný den než rozprostřít" řeší až skóre, sekce 6.)
+ */
+function countDays(groups, parityKey, exemptCourseCodes = new Set()) {
+  const matchesParity = (g) => g.parity === 'weekly' || g.parity === parityKey;
+  const excusedDays = new Set();
+  for (const g of groups) {
+    if (exemptCourseCodes.has(g.courseCode) && matchesParity(g)) {
+      excusedDays.add(g.day);
+    }
+  }
+  const days = new Set();
+  for (const g of groups) {
+    if (matchesParity(g) && !excusedDays.has(g.day)) days.add(g.day);
+  }
+  return days.size;
+}
+
+/**
+ * Společná příprava domén pro solve i findVariants (js/variants.js):
+ * deduplikace předmětů, ukotvení, varianta A a blokované časy.
+ *
+ * Vrací { errors, warnings, domains, exemptCodes, infeasible }, kde doména je
+ * { course, groups, anchored }.
+ */
+function prepareDomains(courses, settings = {}) {
+  const {
+    blockedTimes = [],
+    dayLimitExceptions = [],
+    anchoredGroups = {},
+  } = settings;
+
+  const errors = [];
+  const warnings = [];
+  const exemptCodes = new Set(dayLimitExceptions);
+
+  // Jen předměty, které mají co umístit (CLAUDE.md 3.5).
+  const domains = [];
+  const seenCodes = new Set();
+  for (const course of courses) {
+    if (seenCodes.has(course.code)) {
+      errors.push(`Předmět ${course.code} je nahraný vícekrát.`);
+      continue;
+    }
+    seenCodes.add(course.code);
+    if (!course.hasSeminars || course.groups.length === 0) continue;
+
+    let groups = course.groups;
+    const anchorId = anchoredGroups[course.code];
+    if (anchorId != null) {
+      groups = groups.filter((g) => g.id === anchorId);
+      if (groups.length === 0) {
+        errors.push(
+          `Ukotvená skupina ${anchorId} u předmětu ${course.code} neexistuje.`
+        );
+        continue;
+      }
+    }
+    domains.push({ course, groups, anchored: anchorId != null });
+  }
+  for (const code of Object.keys(anchoredGroups)) {
+    if (!seenCodes.has(code)) {
+      warnings.push(`Ukotvení se odkazuje na nenahraný předmět ${code}.`);
+    }
+  }
+  if (errors.length > 0) {
+    return { errors, warnings, domains: [], exemptCodes, infeasible: false };
+  }
+
+  // Blokované časy. Pevně daná skupina — varianta A (jediná skupina, 5.1) nebo
+  // ruční ukotvení (5 bod 5) — je silnější projev vůle než blokace, takže ji
+  // přebije s upozorněním; aplikace dopočítá zbytek okolo ní. Limit dnů tím
+  // přebit není (to řeší výjimka 5.2). Ostatní skupiny musí blokace respektovat.
+  for (const d of domains) {
+    if (d.course.singleGroup || d.anchored) {
+      const g = d.groups[0];
+      if (conflictsWithBlocked(g, blockedTimes)) {
+        const kind = d.course.singleGroup
+          ? 'jediná skupina předmětu'
+          : 'ručně ukotvená skupina';
+        warnings.push(
+          `Skupina ${g.id} (${kind}) padá do blokovaného času; blokace se ` +
+            'u ní neuplatní (pevné ukotvení přebíjí blokaci).'
+        );
+      }
+      continue;
+    }
+    d.groups = d.groups.filter((g) => !conflictsWithBlocked(g, blockedTimes));
+    if (d.groups.length === 0) {
+      // Více skupin, všechny v blokovaných časech: řešení neexistuje (5.1, 5.4).
+      return { errors, warnings, domains: [], exemptCodes, infeasible: true };
+    }
+  }
+
+  return { errors, warnings, domains, exemptCodes, infeasible: false };
+}
+
+/**
+ * Pořadí předmětů pro prohledávání. Předměty s výjimkou z limitu dnů jdou
+ * první: jejich den může „uvolnit" den ostatním (5.2), takže dokud nejsou
+ * všechny umístěné, nelze na limit dnů bezpečně ořezávat. Uvnitř skupin se
+ * řadí podle velikosti domény, aby ukotvené a bezalternativní skupiny
+ * (varianta A) ořezaly co nejvíc.
+ */
+function orderDomains(domains, exemptCodes) {
+  const sorted = [...domains].sort((a, b) => {
+    const ea = exemptCodes.has(a.course.code) ? 0 : 1;
+    const eb = exemptCodes.has(b.course.code) ? 0 : 1;
+    if (ea !== eb) return ea - eb;
+    return a.groups.length - b.groups.length;
+  });
+  const exemptCount = sorted.filter((d) =>
+    exemptCodes.has(d.course.code)
+  ).length;
+  return { sorted, exemptCount };
+}
+
+/**
+ * Hlavní vstup řešiče.
+ *
+ * courses: pole předmětů z parseru (js/parser.js).
+ * settings: {
+ *   blockedTimes:       [{ day, startMin, endMin, parity? }],
+ *   dayLimit:           číslo N, nebo null = bez limitu (CLAUDE.md 5 bod 4),
+ *   dayLimitExceptions: [kódy předmětů s ruční výjimkou] (5.2),
+ *   anchoredGroups:     { kódPředmětu: idSkupiny } ruční ukotvení (5 bod 5),
+ * }
+ * options: { maxSolutions } strop počtu vrácených řešení.
+ *
+ * Vrací { status: 'ok'|'infeasible'|'error', errors, warnings, schedules,
+ * truncated }. Rozvrh je pole vybraných skupin, právě jedna na předmět.
+ */
+function solve(courses, settings = {}, options = {}) {
+  const { dayLimit = null } = settings;
+  const maxSolutions = options.maxSolutions ?? 5000;
+
+  const prep = prepareDomains(courses, settings);
+  if (prep.errors.length > 0) {
+    return {
+      status: 'error',
+      errors: prep.errors,
+      warnings: prep.warnings,
+      schedules: [],
+      truncated: false,
+    };
+  }
+  if (prep.infeasible) {
+    return {
+      status: 'infeasible',
+      errors: [],
+      warnings: prep.warnings,
+      schedules: [],
+      truncated: false,
+    };
+  }
+  const { exemptCodes } = prep;
+  const { sorted: domains, exemptCount } = orderDomains(prep.domains, exemptCodes);
+
+  const withinDayLimit = (chosen, candidate) => {
+    if (dayLimit == null) return true;
+    for (const parityKey of ['odd', 'even']) {
+      if (countDays([...chosen, candidate], parityKey, exemptCodes) > dayLimit) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const schedules = [];
+  const chosen = [];
+  let truncated = false;
+
+  const backtrack = (i) => {
+    if (schedules.length >= maxSolutions) {
+      truncated = true;
+      return;
+    }
+    if (i === domains.length) {
+      // Ořez během hledání platnost limitu zaručuje; tahle kontrola je jen
+      // pojistka na kompletním rozvrhu, protože logika výjimek je netriviální.
+      if (dayLimit != null) {
+        for (const parityKey of ['odd', 'even']) {
+          if (countDays(chosen, parityKey, exemptCodes) > dayLimit) return;
+        }
+      }
+      schedules.push(chosen.slice());
+      return;
+    }
+    for (const g of domains[i].groups) {
+      if (chosen.some((c) => groupsConflict(c, g))) continue;
+      // Ořez na limit dnů je korektní až po umístění všech předmětů s výjimkou:
+      // teprve pak jsou „uvolněné" dny konečné a počet dnů už jen roste.
+      if (i >= exemptCount && !withinDayLimit(chosen, g)) continue;
+      chosen.push(g);
+      backtrack(i + 1);
+      chosen.pop();
+      if (truncated) return;
+    }
+  };
+  backtrack(0);
+
+  return {
+    status: schedules.length > 0 ? 'ok' : 'infeasible',
+    errors: [],
+    warnings: prep.warnings,
+    schedules,
+    truncated,
+  };
+}
+
+return {groupsConflict, conflictsWithBlocked, countDays, prepareDomains, orderDomains, solve};
+})();
+__m['variants.js'] = (() => {
+'use strict';
+/**
+ * Výběr obodovaných variant rozvrhu (CLAUDE.md 8.1 nad sekcemi 5 a 6).
+ *
+ * Všech přípustných kombinací mohou být miliardy, takže se nevyjmenovávají:
+ * prohledává se do hloubky s ořezáváním podle horní meze skóre (branch and
+ * bound). Mez je korektní díky monotonii postihů:
+ *
+ *  - aditivní příspěvky (vyučující, preferované časy) mají známé maximum
+ *    pro každý dosud neumístěný předmět,
+ *  - tvar dne nikdy nepřidá kladné body (optimisticky nula),
+ *  - postih za dny jen roste; navíc každý (týden, den) pojme nejvýše
+ *    blocksPerDay bloků, takže když se zbývající semináře nevejdou do volné
+ *    kapacity už obsazených dnů, je spočitatelné, kolik nových dnů si
+ *    vynutí, a mez se o ně bezpečně zpřísní.
+ *
+ * Kapacitní stav (obsazenost dnů) se udržuje přírůstkově při volbě a návratu,
+ * mez je tak O(1) na uzel.
+ */
+
+const {
+  groupsConflict,
+  countDays,
+  prepareDomains,
+  orderDomains,
+} = __m['solver.js'];
+const {
+  DEFAULT_PARAMS,
+  scoreSchedule,
+  groupAdditiveScore,
+  groupBlocks,
+} = __m['scoring.js'];
+
+/**
+ * Najde až 5 variant rozvrhu dle výchozí skladby 8.1: tři nejvyšší celkové
+ * skóre, jedna optimalizovaná na vyučující, jedna nejkompaktnější; seřazené
+ * podle skóre. Překryvy skladby se doplní dalšími nejlepšími podle skóre.
+ *
+ * courses, settings: stejné jako u solve (js/solver.js).
+ * prefs: viz groupAdditiveScore (js/scoring.js).
+ * options: {
+ *   params:       přepis DEFAULT_PARAMS,
+ *   keep:         kolik nejlepších řešení držet během hledání (výchozí 16),
+ *   nodeLimit:    pojistka rozsahu prohledávání (výchozí 2 000 000 uzlů),
+ *   blocksPerDay: kapacita dne pro mez (výchozí 6 bloků),
+ * }
+ *
+ * Vrací { status, errors, warnings, variants, truncated, nodesExplored },
+ * variants: [{ schedule, score, tags }].
+ */
+function findVariants(courses, settings = {}, prefs = {}, options = {}) {
+  const params = { ...DEFAULT_PARAMS, ...(options.params ?? {}) };
+  const { dayLimit = null } = settings;
+
+  const prep = prepareDomains(courses, settings);
+  const base = { errors: prep.errors, warnings: prep.warnings, variants: [] };
+  if (prep.errors.length > 0) return { status: 'error', ...base };
+  if (prep.infeasible) return { status: 'infeasible', ...base };
+  const { exemptCodes } = prep;
+  const { sorted: domains, exemptCount } = orderDomains(prep.domains, exemptCodes);
+
+  // Aditivní skóre skupin předem; slibné skupiny první, aby se dobrá řešení
+  // našla brzy a mez začala ořezávat co nejdřív.
+  const additiveOf = new Map();
+  const blocksOf = new Map();
+  for (const d of domains) {
+    for (const g of d.groups) {
+      additiveOf.set(g.id, groupAdditiveScore(g, prefs, params).total);
+      blocksOf.set(g.id, groupBlocks(g, params).length);
+    }
+    // Skupiny se stejným dnem, paritou, časem i aditivním skóre jsou pro
+    // celkové skóre zaměnitelné (liší se jen místností) — do prohledávání
+    // stačí jedna z nich. Varianty se pak liší v čase, ne v místnostech.
+    const byShape = new Map();
+    for (const g of d.groups) {
+      const key = `${g.day}|${g.parity}|${g.startMin}|${g.endMin}|${additiveOf.get(g.id)}`;
+      if (!byShape.has(key)) byShape.set(key, g);
+    }
+    d.groups = [...byShape.values()].sort(
+      (a, b) => additiveOf.get(b.id) - additiveOf.get(a.id)
+    );
+  }
+  // Optimistický zbytek aditivních příspěvků od i-tého předmětu dál.
+  const suffixOptimistic = new Array(domains.length + 1).fill(0);
+  for (let i = domains.length - 1; i >= 0; i--) {
+    suffixOptimistic[i] =
+      suffixOptimistic[i + 1] +
+      Math.max(...domains[i].groups.map((g) => additiveOf.get(g.id)));
+  }
+  // Minimum bloko-slotů, které zbývající předměty ještě potřebují
+  // (týdenní skupina zabírá slot v obou týdnech).
+  const blocksPerDay = options.blocksPerDay ?? 6;
+  const suffixMinSlots = new Array(domains.length + 1).fill(0);
+  for (let i = domains.length - 1; i >= 0; i--) {
+    suffixMinSlots[i] =
+      suffixMinSlots[i + 1] +
+      Math.min(
+        ...domains[i].groups.map(
+          (g) => blocksOf.get(g.id) * (g.parity === 'weekly' ? 2 : 1)
+        )
+      );
+  }
+
+  const keep = options.keep ?? 16;
+  const nodeLimit = options.nodeLimit ?? 2000000;
+
+  // top: vzestupně podle skóre, top[0] je nejhorší z držených.
+  const top = [];
+  let bestTeachers = null;
+  let bestCompact = null;
+  let nodes = 0;
+  let truncated = false;
+
+  const compactnessOf = (entry) =>
+    entry.score.breakdown.days + entry.score.breakdown.shape;
+
+  const record = (chosen) => {
+    if (dayLimit != null) {
+      for (const parityKey of ['odd', 'even']) {
+        if (countDays(chosen, parityKey, exemptCodes) > dayLimit) return;
+      }
+    }
+    const entry = {
+      schedule: chosen.slice(),
+      score: scoreSchedule(chosen, prefs, params),
+    };
+    if (top.length < keep || entry.score.total > top[0].score.total) {
+      top.push(entry);
+      top.sort((a, b) => a.score.total - b.score.total);
+      if (top.length > keep) top.shift();
+    }
+    if (
+      !bestTeachers ||
+      entry.score.breakdown.teachers > bestTeachers.score.breakdown.teachers ||
+      (entry.score.breakdown.teachers === bestTeachers.score.breakdown.teachers &&
+        entry.score.total > bestTeachers.score.total)
+    ) {
+      bestTeachers = entry;
+    }
+    if (
+      !bestCompact ||
+      compactnessOf(entry) > compactnessOf(bestCompact) ||
+      (compactnessOf(entry) === compactnessOf(bestCompact) &&
+        entry.score.total > bestCompact.score.total)
+    ) {
+      bestCompact = entry;
+    }
+  };
+
+  const withinDayLimit = (chosen, candidate) => {
+    if (dayLimit == null) return true;
+    for (const parityKey of ['odd', 'even']) {
+      if (countDays([...chosen, candidate], parityKey, exemptCodes) > dayLimit) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Přírůstkový kapacitní stav: obsazené bloky na (týden, den), počet
+  // rozsvícených dnů a volná kapacita v nich. Příspěvek dne do kapacity je
+  // max(0, blocksPerDay - obsazeno), nerozsvícený den nepřispívá.
+  const occupancy = new Map();
+  let litDays = 0;
+  let freeCapacity = 0;
+  const capacityOf = (used) =>
+    used > 0 ? Math.max(0, blocksPerDay - used) : 0;
+  const weeksOf = (g) => (g.parity === 'weekly' ? ['odd', 'even'] : [g.parity]);
+  const applyGroup = (g, sign) => {
+    const blocks = blocksOf.get(g.id) * sign;
+    for (const week of weeksOf(g)) {
+      const key = `${week}|${g.day}`;
+      const prev = occupancy.get(key) ?? 0;
+      const next = prev + blocks;
+      occupancy.set(key, next);
+      freeCapacity += capacityOf(next) - capacityOf(prev);
+      if (prev === 0 && next > 0) litDays++;
+      if (prev > 0 && next === 0) litDays--;
+    }
+  };
+  const introducesNewDay = (g) =>
+    weeksOf(g).some((week) => !(occupancy.get(`${week}|${g.day}`) > 0));
+
+  const chosen = [];
+  const dfs = (i, additive) => {
+    if (truncated) return;
+    if (++nodes > nodeLimit) {
+      truncated = true;
+      return;
+    }
+    if (i === domains.length) {
+      record(chosen);
+      return;
+    }
+    if (top.length === keep) {
+      const extraDays = Math.max(
+        0,
+        Math.ceil((suffixMinSlots[i] - freeCapacity) / blocksPerDay)
+      );
+      const bound =
+        additive +
+        suffixOptimistic[i] +
+        params.dayPenalty * (litDays + extraDays);
+      if (bound <= top[0].score.total) return;
+    }
+    // Skupiny na už obsazených dnech napřed: kompaktní (dobře skórující)
+    // rozvrhy se najdou brzy a mez pak ořezává agresivněji. Stabilní rozklad
+    // zachová pořadí podle aditivního skóre uvnitř obou částí.
+    const groups = domains[i].groups;
+    for (let pass = 0; pass < 2; pass++) {
+      for (const g of groups) {
+        // 1. průchod: skupiny na už obsazených dnech, 2. průchod: zbytek.
+        if ((pass === 0) === introducesNewDay(g)) continue;
+        if (chosen.some((c) => groupsConflict(c, g))) continue;
+        if (i >= exemptCount && !withinDayLimit(chosen, g)) continue;
+        chosen.push(g);
+        applyGroup(g, 1);
+        dfs(i + 1, additive + additiveOf.get(g.id));
+        applyGroup(g, -1);
+        chosen.pop();
+        if (truncated) return;
+      }
+    }
+  };
+  dfs(0, 0);
+
+  if (top.length === 0) {
+    return {
+      status: 'infeasible',
+      errors: [],
+      warnings: prep.warnings,
+      variants: [],
+      truncated,
+      nodesExplored: nodes,
+    };
+  }
+
+  // Výchozí skladba 8.1: 3× nejvyšší skóre + vyučující + nejkompaktnější.
+  // Poznámka: bestTeachers/bestCompact se sledují jen mezi dokončenými
+  // řešeními; větev ořezaná kvůli beznadějnému celkovému skóre se nedokončí,
+  // extrém čistě v jedné ose tedy může uniknout. Váhy vyučujících i
+  // kompaktnosti jsou ale zároveň hlavní složky celkového skóre, takže
+  // prakticky zůstávají v horní části prostoru, kterou mez propouští.
+  const byTotalDesc = [...top].sort((a, b) => b.score.total - a.score.total);
+  const keyOf = (e) => e.schedule.map((g) => g.id).sort().join('|');
+  const picked = [];
+  const pickedByKey = new Map();
+  const push = (entry, tag) => {
+    if (!entry) return;
+    const key = keyOf(entry);
+    const existing = pickedByKey.get(key);
+    if (existing) {
+      if (!existing.tags.includes(tag)) existing.tags.push(tag);
+      return;
+    }
+    const withTags = { schedule: entry.schedule, score: entry.score, tags: [tag] };
+    picked.push(withTags);
+    pickedByKey.set(key, withTags);
+  };
+  for (const e of byTotalDesc.slice(0, 3)) push(e, 'skóre');
+  push(bestTeachers, 'vyučující');
+  push(bestCompact, 'kompaktnost');
+  for (const e of byTotalDesc) {
+    if (picked.length >= 5) break;
+    push(e, 'skóre');
+  }
+  picked.sort((a, b) => b.score.total - a.score.total);
+
+  return {
+    status: 'ok',
+    errors: [],
+    warnings: prep.warnings,
+    variants: picked.slice(0, 5),
+    truncated,
+    nodesExplored: nodes,
+  };
+}
+
+return {findVariants};
+})();
+__m['grid.js'] = (() => {
+'use strict';
+/**
+ * Mřížka rozvrhu (CLAUDE.md 8.2): svisle dny, vodorovně výukové bloky.
+ * Každý den má dva navazující řádky (lichý a sudý týden); čtrnáctidenní
+ * seminář se ukáže jen ve svém řádku, týdenní je vizuálně spojený přes oba
+ * (rowspan). V buňce je celá identifikace skupiny, aby šel výsledek použít
+ * k zápisu i k exportu.
+ */
+
+const { DAYS } = __m['parser.js'];
+const { groupBlocks } = __m['scoring.js'];
+
+function timeLabel(block) {
+  return `${8 + 2 * block}:00–${8 + 2 * block + 1}:40`;
+}
+
+/** Rozsah sloupců: standardně bloky 0–5, nestandardní časy ho rozšíří. */
+function blockRange(schedule) {
+  let min = 0;
+  let max = 5;
+  for (const g of schedule) {
+    const blocks = groupBlocks(g);
+    min = Math.min(min, blocks[0]);
+    max = Math.max(max, blocks[blocks.length - 1]);
+  }
+  return { min, max };
+}
+
+function emptyCell() {
+  const td = document.createElement('td');
+  td.className = 'empty';
+  return td;
+}
+
+function groupCell(group, courseName, colSpan, rowSpan) {
+  const td = document.createElement('td');
+  td.className = 'cell' + (rowSpan === 2 ? ' weekly' : '');
+  td.colSpan = colSpan;
+  td.rowSpan = rowSpan;
+  const id = document.createElement('strong');
+  id.textContent = group.id;
+  td.append(id);
+  if (courseName) {
+    const name = document.createElement('div');
+    name.className = 'c-name';
+    name.textContent = courseName;
+    td.append(name);
+  }
+  const detail = document.createElement('div');
+  detail.className = 'c-detail';
+  detail.textContent =
+    `${group.start}–${group.end}` +
+    (group.room ? ` · ${group.room}` : '') +
+    (group.teacher ? ` · ${group.teacher}` : '');
+  td.append(detail);
+  td.title =
+    `${group.id}${courseName ? ` — ${courseName}` : ''} · ${group.day} ` +
+    `${group.start}–${group.end}` +
+    (group.room ? ` · učebna ${group.room}` : '') +
+    (group.teacher ? ` · ${group.teacher}` : '');
+  return td;
+}
+
+/**
+ * Postaví <table> s rozvrhem z vybraných skupin.
+ * courseNames: Map kód předmětu -> název (pro popisky buněk).
+ */
+function buildVariantGrid(schedule, courseNames = new Map()) {
+  const { min, max } = blockRange(schedule);
+  const table = document.createElement('table');
+  table.className = 'timetable';
+
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  for (const label of ['Den', 'Týden']) {
+    const th = document.createElement('th');
+    th.textContent = label;
+    headRow.append(th);
+  }
+  for (let b = min; b <= max; b++) {
+    const th = document.createElement('th');
+    th.textContent = timeLabel(b);
+    headRow.append(th);
+  }
+  thead.append(headRow);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  for (const day of DAYS) {
+    const dayGroups = schedule.filter((g) => g.day === day);
+    const oddGroups = dayGroups.filter((g) => g.parity !== 'even');
+    const evenOnly = dayGroups.filter((g) => g.parity === 'even');
+
+    const trOdd = document.createElement('tr');
+    trOdd.className = 'row-odd';
+    const trEven = document.createElement('tr');
+    trEven.className = 'row-even';
+
+    const dayTh = document.createElement('th');
+    dayTh.className = 'day';
+    dayTh.rowSpan = 2;
+    dayTh.textContent = day;
+    trOdd.append(dayTh);
+    const oddTh = document.createElement('th');
+    oddTh.className = 'parity';
+    oddTh.textContent = 'lichý';
+    trOdd.append(oddTh);
+    const evenTh = document.createElement('th');
+    evenTh.className = 'parity';
+    evenTh.textContent = 'sudý';
+    trEven.append(evenTh);
+
+    // Bloky přeskočené kvůli colspan (víceblokové skupiny) a rowspan
+    // (týdenní skupina obsadí i sudý řádek).
+    const skipOdd = new Set();
+    const skipEven = new Set();
+    for (let b = min; b <= max; b++) {
+      if (!skipOdd.has(b)) {
+        const g = oddGroups.find((x) => groupBlocks(x)[0] === b);
+        if (g) {
+          const blocks = groupBlocks(g);
+          const weekly = g.parity === 'weekly';
+          trOdd.append(
+            groupCell(g, courseNames.get(g.courseCode), blocks.length, weekly ? 2 : 1)
+          );
+          for (const bb of blocks.slice(1)) skipOdd.add(bb);
+          if (weekly) for (const bb of blocks) skipEven.add(bb);
+        } else {
+          trOdd.append(emptyCell());
+        }
+      }
+      if (!skipEven.has(b)) {
+        const g = evenOnly.find((x) => groupBlocks(x)[0] === b);
+        if (g) {
+          const blocks = groupBlocks(g);
+          trEven.append(groupCell(g, courseNames.get(g.courseCode), blocks.length, 1));
+          for (const bb of blocks.slice(1)) skipEven.add(bb);
+        } else {
+          trEven.append(emptyCell());
+        }
+      }
+    }
+    tbody.append(trOdd, trEven);
+  }
+  table.append(tbody);
+  return table;
+}
+
+return {buildVariantGrid};
+})();
+__m['app.js'] = (() => {
+'use strict';
+/**
+ * Uživatelské rozhraní skladače (CLAUDE.md sekce 7, milník 4).
+ * Nahrání souborů, preference vyučujících, ukotvení, blokace, limit dnů,
+ * vyhrazení přednášek; výsledek zatím jako přehled variant (mřížka a export
+ * jsou milník 5).
+ */
+
+const { parseCourseHtml, periodOrdinal, expectedPeriod, DAYS } = __m['parser.js'];
+const { findVariants } = __m['variants.js'];
+const { buildVariantGrid } = __m['grid.js'];
+
+const STORAGE_KEY = 'skladac-rozvrhu-v1';
+const BLOCKS = [0, 1, 2, 3, 4, 5]; // 8:00 az 19:40
+const PARITY_LABEL = { odd: 'lichý týden', even: 'sudý týden', weekly: '' };
+
+const state = {
+  courses: [],
+  teacherPrefs: {}, // kód -> { wanted: [], unwanted: [] }
+  dayLimit: null,
+  blocked: new Set(), // "den|blok"
+  exceptions: new Set(), // kódy předmětů s výjimkou z limitu dnů
+  anchors: {}, // kód -> id skupiny
+  lectureBlock: new Set(), // kódy předmětů s vyhrazením časů přednášek
+};
+
+const el = (id) => document.getElementById(id);
+const expected = expectedPeriod();
+
+// ---------- persistence (localStorage) ----------
+
+function saveState() {
+  const data = {
+    courses: state.courses,
+    teacherPrefs: state.teacherPrefs,
+    dayLimit: state.dayLimit,
+    blocked: [...state.blocked],
+    exceptions: [...state.exceptions],
+    anchors: state.anchors,
+    lectureBlock: [...state.lectureBlock],
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    state.courses = data.courses ?? [];
+    state.teacherPrefs = data.teacherPrefs ?? {};
+    state.dayLimit = data.dayLimit ?? null;
+    state.blocked = new Set(data.blocked ?? []);
+    state.exceptions = new Set(data.exceptions ?? []);
+    state.anchors = data.anchors ?? {};
+    state.lectureBlock = new Set(data.lectureBlock ?? []);
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
+// ---------- pomocníci ----------
+
+function message(kind, text) {
+  const div = document.createElement('div');
+  div.className = `msg ${kind}`;
+  div.textContent = text;
+  return div;
+}
+
+function timeLabel(block) {
+  return `${8 + 2 * block}:00–${8 + 2 * block + 1}:40`;
+}
+
+function groupLabel(g) {
+  const parity = PARITY_LABEL[g.parity];
+  return (
+    `${g.number} · ${g.day} ${g.start}–${g.end}` +
+    (parity ? ` (${parity})` : '') +
+    (g.room ? ` · uč. ${g.room}` : '') +
+    (g.teacher ? ` · ${g.teacher}` : '')
+  );
+}
+
+function courseTeachers(course) {
+  // Skupina může mít víc vyučujících najednou — nabízej jednotlivá jména.
+  return [
+    ...new Set(
+      course.groups
+        .flatMap((g) => (g.teacher ? g.teacher.split(',') : []))
+        .map((t) => t.trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function groupHasTeacher(group, teacher) {
+  if (!group.teacher) return false;
+  return group.teacher.split(',').some((t) => t.trim() === teacher);
+}
+
+function teacherStateOf(code, teacher) {
+  const p = state.teacherPrefs[code];
+  if (p?.wanted?.includes(teacher)) return 'want';
+  if (p?.unwanted?.includes(teacher)) return 'avoid';
+  return 'neutral';
+}
+
+function setTeacherState(code, teacher, value) {
+  const p = (state.teacherPrefs[code] ??= { wanted: [], unwanted: [] });
+  p.wanted = p.wanted.filter((t) => t !== teacher);
+  p.unwanted = p.unwanted.filter((t) => t !== teacher);
+  if (value === 'want') p.wanted.push(teacher);
+  if (value === 'avoid') p.unwanted.push(teacher);
+}
+
+function removeCourse(code) {
+  state.courses = state.courses.filter((c) => c.code !== code);
+  delete state.teacherPrefs[code];
+  delete state.anchors[code];
+  state.exceptions.delete(code);
+  state.lectureBlock.delete(code);
+}
+
+// ---------- nahrávání souborů ----------
+
+async function handleFiles(files) {
+  const messages = el('upload-messages');
+  messages.replaceChildren();
+  for (const file of files) {
+    const html = await file.text();
+    const r = parseCourseHtml(html);
+    if (!r.ok) {
+      messages.append(
+        message('error', `${file.name}: ${r.errors.join(' ')}`)
+      );
+      continue;
+    }
+    const c = r.course;
+    // Kontrola semestru (CLAUDE.md 3.3): starší období je chyba,
+    // novější se přijme s upozorněním.
+    if (periodOrdinal(c.period) < periodOrdinal(expected)) {
+      messages.append(
+        message(
+          'error',
+          `${c.code}: stránka je z minulého období (${c.period.raw}, ` +
+            `očekává se ${expected.raw}). Předmět nebyl přidán — ulož si ` +
+            'aktuální stránku z katalogu.'
+        )
+      );
+      continue;
+    }
+    if (periodOrdinal(c.period) > periodOrdinal(expected)) {
+      messages.append(
+        message(
+          'warning',
+          `${c.code}: stránka je z budoucího období (${c.period.raw}). ` +
+            'Přidáno — skládáš rozvrh dopředu.'
+        )
+      );
+    }
+    for (const w of r.warnings) {
+      messages.append(message('warning', `${c.code}: ${w}`));
+    }
+    const existing = state.courses.findIndex((x) => x.code === c.code);
+    if (existing !== -1) {
+      state.courses[existing] = c;
+      messages.append(
+        message('ok', `${c.code}: znovu nahráno, nahrazena starší verze.`)
+      );
+    } else {
+      state.courses.push(c);
+    }
+  }
+  saveState();
+  renderCourses();
+}
+
+// ---------- vykreslení předmětů ----------
+
+function renderCourses() {
+  // Překreslení dočasně zkrátí stránku a prohlížeč by přiskřípl scroll
+  // nahoru — pozici si proto zapamatujeme a hned vrátíme.
+  const scrollY = window.scrollY;
+  const container = el('courses');
+  container.replaceChildren();
+  if (state.courses.length === 0) {
+    container.append(message('ok', 'Zatím žádné předměty.'));
+    return;
+  }
+  const periods = new Set(state.courses.map((c) => c.period.raw));
+  if (periods.size > 1) {
+    container.append(
+      message(
+        'warning',
+        `Nahrané předměty se liší obdobím (${[...periods].join(', ')}).`
+      )
+    );
+  }
+
+  for (const c of state.courses) {
+    const card = document.createElement('div');
+    card.className = 'course';
+
+    const header = document.createElement('div');
+    header.className = 'course-header';
+    const title = document.createElement('strong');
+    title.textContent = `${c.code} — ${c.name}`;
+    header.append(title);
+    const periodBadge = document.createElement('span');
+    periodBadge.className =
+      'badge' + (c.period.raw !== expected.raw ? ' warn' : '');
+    periodBadge.textContent = c.period.raw;
+    header.append(periodBadge);
+    if (c.language !== 'Čeština') {
+      const lang = document.createElement('span');
+      lang.className = 'badge info';
+      lang.textContent = c.language;
+      header.append(lang);
+    }
+    if (c.groups.length > 0) {
+      const groupsBadge = document.createElement('span');
+      groupsBadge.className = 'badge' + (c.singleGroup ? ' info' : '');
+      groupsBadge.textContent = c.singleGroup
+        ? 'jediná skupina — vždy v rozvrhu'
+        : `${c.groups.length} skupin`;
+      header.append(groupsBadge);
+    } else {
+      const noSem = document.createElement('span');
+      noSem.className = 'badge';
+      noSem.textContent = 'bez seminárních skupin';
+      header.append(noSem);
+    }
+    const spacer = document.createElement('span');
+    spacer.className = 'spacer';
+    header.append(spacer);
+    const remove = document.createElement('button');
+    remove.className = 'remove-course';
+    remove.textContent = 'Odebrat';
+    remove.addEventListener('click', () => {
+      removeCourse(c.code);
+      saveState();
+      renderCourses();
+    });
+    header.append(remove);
+    card.append(header);
+
+    const controls = document.createElement('div');
+    controls.className = 'course-controls';
+
+    // Preference vyučujících (6.1) — jen skuteční vyučující skupin.
+    const teachers = courseTeachers(c);
+    if (teachers.length > 0) {
+      for (const t of teachers) {
+        const row = document.createElement('div');
+        row.className = 'teacher-row';
+        const name = document.createElement('span');
+        name.textContent = t;
+        row.append(name);
+        const tri = document.createElement('span');
+        tri.className = 'tri';
+        const current = teacherStateOf(c.code, t);
+        for (const [value, label] of [
+          ['neutral', 'neutrální'],
+          ['want', 'chci'],
+          ['avoid', 'nechci'],
+        ]) {
+          const b = document.createElement('button');
+          b.textContent = label;
+          b.dataset.value = value;
+          if (current === value) b.className = `active-${value}`;
+          // Aktualizace na místě, bez překreslení stránky — překreslení by
+          // uživatele odhodilo ze scrollované pozice.
+          b.addEventListener('click', () => {
+            setTeacherState(c.code, t, value);
+            saveState();
+            for (const sibling of tri.children) sibling.className = '';
+            b.className = `active-${value}`;
+          });
+          tri.append(b);
+        }
+        row.append(tri);
+        row.append(spanNote(noteForTeacher(c, t)));
+        controls.append(row);
+      }
+    }
+
+    // Ukotvení skupiny (5 bod 5) — jen u předmětů s výběrem.
+    if (c.groups.length > 1) {
+      const row = document.createElement('div');
+      const label = document.createElement('span');
+      label.className = 'control-label';
+      label.textContent = 'Ukotvit skupinu:';
+      row.append(label);
+      const select = document.createElement('select');
+      const none = document.createElement('option');
+      none.value = '';
+      none.textContent = '— žádná —';
+      select.append(none);
+      for (const g of c.groups) {
+        const o = document.createElement('option');
+        o.value = g.id;
+        o.textContent = groupLabel(g);
+        select.append(o);
+      }
+      select.value = state.anchors[c.code] ?? '';
+      select.addEventListener('change', () => {
+        if (select.value) state.anchors[c.code] = select.value;
+        else delete state.anchors[c.code];
+        saveState();
+      });
+      row.append(select);
+      controls.append(row);
+    }
+
+    // Výjimka z limitu dnů (5.2).
+    if (c.groups.length > 0) {
+      controls.append(
+        checkboxRow(
+          'Výjimka z limitu dnů (dny tohoto předmětu se do limitu nepočítají)',
+          state.exceptions.has(c.code),
+          (checked) => {
+            if (checked) state.exceptions.add(c.code);
+            else state.exceptions.delete(c.code);
+            saveState();
+          }
+        )
+      );
+    }
+
+    // Vyhrazení časů přednášek (sekce 7, výchozí stav vypnuto).
+    if (c.lectures.length > 0) {
+      const lecturesText = c.lectures
+        .map(
+          (l) =>
+            `${l.day} ${l.start}–${l.end}` +
+            (l.parity !== 'weekly' ? ` (${PARITY_LABEL[l.parity]})` : '')
+        )
+        .join(', ');
+      const row = checkboxRow(
+        `Vyhradit časy přednášek jako blokované (${lecturesText})`,
+        state.lectureBlock.has(c.code),
+        (checked) => {
+          if (checked) state.lectureBlock.add(c.code);
+          else state.lectureBlock.delete(c.code);
+          saveState();
+        }
+      );
+      if (c.hasIrregularLectures) {
+        row.append(
+          spanNote(
+            '⚠ Přednášky jsou nepravidelné (konkrétní data) — vyhrazení ' +
+              'zablokuje všechny jejich časy a značně omezí možnosti.'
+          )
+        );
+      }
+      controls.append(row);
+    }
+
+    card.append(controls);
+    container.append(card);
+  }
+  window.scrollTo(0, scrollY);
+}
+
+function noteForTeacher(course, teacher) {
+  const count = course.groups.filter((g) => groupHasTeacher(g, teacher)).length;
+  return `(${count} z ${course.groups.length} skupin)`;
+}
+
+function spanNote(text) {
+  const s = document.createElement('span');
+  s.className = 'hint';
+  s.textContent = ` ${text}`;
+  return s;
+}
+
+function checkboxRow(labelText, checked, onChange) {
+  const row = document.createElement('div');
+  const label = document.createElement('label');
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = checked;
+  box.addEventListener('change', () => onChange(box.checked));
+  label.append(box, ` ${labelText}`);
+  row.append(label);
+  return row;
+}
+
+// ---------- mřížka blokovaných časů ----------
+
+function renderBlockedGrid() {
+  const table = el('blocked-grid');
+  table.replaceChildren();
+  const head = document.createElement('tr');
+  head.append(document.createElement('th'));
+  for (const day of DAYS) {
+    const th = document.createElement('th');
+    th.textContent = day;
+    head.append(th);
+  }
+  table.append(head);
+  for (const block of BLOCKS) {
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.textContent = timeLabel(block);
+    tr.append(th);
+    for (const day of DAYS) {
+      const key = `${day}|${block}`;
+      const td = document.createElement('td');
+      const b = document.createElement('button');
+      b.textContent = state.blocked.has(key) ? 'blokováno' : '·';
+      if (state.blocked.has(key)) b.className = 'blocked';
+      b.addEventListener('click', () => {
+        if (state.blocked.has(key)) state.blocked.delete(key);
+        else state.blocked.add(key);
+        saveState();
+        renderBlockedGrid();
+      });
+      td.append(b);
+      tr.append(td);
+    }
+    table.append(tr);
+  }
+}
+
+// ---------- výpočet a výsledky ----------
+
+function buildSettings() {
+  const blockedTimes = [];
+  for (const key of state.blocked) {
+    const [day, block] = key.split('|');
+    blockedTimes.push({
+      day,
+      startMin: 480 + 120 * Number(block),
+      endMin: 480 + 120 * (Number(block) + 1),
+    });
+  }
+  for (const code of state.lectureBlock) {
+    const course = state.courses.find((c) => c.code === code);
+    for (const l of course?.lectures ?? []) {
+      blockedTimes.push({
+        day: l.day,
+        startMin: l.startMin,
+        endMin: l.endMin,
+        ...(l.parity !== 'weekly' ? { parity: l.parity } : {}),
+      });
+    }
+  }
+  return {
+    blockedTimes,
+    dayLimit: state.dayLimit,
+    dayLimitExceptions: [...state.exceptions],
+    anchoredGroups: state.anchors,
+  };
+}
+
+function compute() {
+  const status = el('status');
+  const results = el('results');
+  results.replaceChildren();
+  if (state.courses.length === 0) {
+    status.replaceChildren(message('error', 'Nejdřív nahraj předměty.'));
+    return;
+  }
+  status.replaceChildren(message('ok', 'Hledám nejlepší varianty…'));
+  // setTimeout: ať se stihne vykreslit stav před ~2s výpočtem.
+  setTimeout(() => {
+    const started = performance.now();
+    const r = findVariants(state.courses, buildSettings(), {
+      teachers: state.teacherPrefs,
+    });
+    const elapsed = Math.round(performance.now() - started);
+    renderResults(r, elapsed);
+  }, 30);
+}
+
+function renderResults(r, elapsed) {
+  const status = el('status');
+  const results = el('results');
+  status.replaceChildren();
+  results.replaceChildren();
+
+  for (const w of r.warnings) results.append(message('warning', w));
+
+  if (r.status === 'error') {
+    for (const e of r.errors) results.append(message('error', e));
+    return;
+  }
+  if (r.status === 'infeasible') {
+    // Prostá hláška dle 5.4.
+    results.append(
+      message('error', 'Žádný platný rozvrh neexistuje. Uber omezení a zkus to znovu.')
+    );
+    return;
+  }
+
+  status.replaceChildren(
+    message('ok', `Hotovo za ${elapsed} ms. Nalezené varianty seřazené podle skóre:`)
+  );
+
+  r.variants.forEach((v, i) => {
+    const card = document.createElement('div');
+    card.className = 'variant';
+
+    const header = document.createElement('div');
+    header.className = 'variant-header';
+    const title = document.createElement('strong');
+    title.textContent = `Varianta ${i + 1}`;
+    header.append(title);
+    const score = document.createElement('span');
+    score.className = 'score';
+    score.textContent = `skóre ${v.score.total}`;
+    header.append(score);
+    for (const tag of v.tags) {
+      const badge = document.createElement('span');
+      badge.className = 'badge info';
+      badge.textContent = tag;
+      header.append(badge);
+    }
+    card.append(header);
+
+    // Přehled hodnocení podle kritérií (8.3).
+    const b = v.score.breakdown;
+    const d = v.score.details;
+    const breakdown = document.createElement('div');
+    breakdown.className = 'breakdown';
+    breakdown.textContent =
+      `vyučující ${b.teachers} · dny ${b.days} · tvar dne ${b.shape} · ` +
+      `preferované časy ${b.preferredTimes} — dnů lichý/sudý týden: ` +
+      `${d.daysOdd}/${d.daysEven}, oken: ${d.windows}, nejdelší řada: ${d.longestRun}`;
+    card.append(breakdown);
+
+    // Mřížka rozvrhu (8.2): dny svisle, každý den řádek lichého a sudého
+    // týdne, týdenní semináře spojené přes oba.
+    const courseNames = new Map(state.courses.map((c) => [c.code, c.name]));
+    const gridWrap = document.createElement('div');
+    gridWrap.className = 'grid-wrap';
+    gridWrap.append(buildVariantGrid(v.schedule, courseNames));
+    card.append(gridWrap);
+
+    const footer = document.createElement('div');
+    footer.className = 'variant-footer';
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'export';
+    exportBtn.textContent = 'Exportovat (PDF / tisk)';
+    // Export přes tiskový dialog prohlížeče: vytiskne se jen tato varianta,
+    // na ležato (viz @media print v css). "Uložit jako PDF" je volba dialogu.
+    exportBtn.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('.variant.print-target')) {
+        other.classList.remove('print-target');
+      }
+      card.classList.add('print-target');
+      document.body.classList.add('has-print-target');
+      window.print();
+    });
+    footer.append(exportBtn);
+    card.append(footer);
+    results.append(card);
+  });
+}
+
+// ---------- start ----------
+
+// Po zavření tiskového dialogu se výběr varianty k tisku zruší, aby běžný
+// Cmd/Ctrl+P zase tiskl celou stránku.
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('has-print-target');
+  for (const v of document.querySelectorAll('.variant.print-target')) {
+    v.classList.remove('print-target');
+  }
+});
+
+el('expected-period').textContent = expected.raw;
+el('file-input').addEventListener('change', (e) => {
+  handleFiles([...e.target.files]);
+  e.target.value = '';
+});
+el('day-limit').addEventListener('change', (e) => {
+  state.dayLimit = e.target.value ? Number(e.target.value) : null;
+  saveState();
+});
+el('compute').addEventListener('click', compute);
+el('clear-all').addEventListener('click', () => {
+  if (!confirm('Opravdu vymazat všechny předměty a nastavení?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  state.courses = [];
+  state.teacherPrefs = {};
+  state.dayLimit = null;
+  state.blocked = new Set();
+  state.exceptions = new Set();
+  state.anchors = {};
+  state.lectureBlock = new Set();
+  el('day-limit').value = '';
+  el('upload-messages').replaceChildren();
+  el('results').replaceChildren();
+  el('status').replaceChildren();
+  renderCourses();
+  renderBlockedGrid();
+});
+
+loadState();
+el('day-limit').value = state.dayLimit ?? '';
+renderCourses();
+renderBlockedGrid();
+
+// Příznak pro hlídku v index.html: kód aplikace se úspěšně načetl.
+window.__appLoaded = true;
+
+return {};
+})();
+</script>
+</body>
+</html>
